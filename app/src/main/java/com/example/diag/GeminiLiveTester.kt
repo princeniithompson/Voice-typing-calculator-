@@ -11,12 +11,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import org.json.JSONArray
-import org.json.JSONObject
+import com.example.voice.GeminiLiveProtocol
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -40,9 +38,7 @@ import kotlin.math.sqrt
  */
 object GeminiLiveTester {
 
-    private const val MODEL_NAME = "models/gemini-3.5-transcribe-live"
-    private const val ENDPOINT_HOST = "generativelanguage.googleapis.com"
-    private const val WS_PATH = "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
+    private const val MODEL_NAME = GeminiLiveProtocol.MODEL
 
     suspend fun runTest(
         context: Context,
@@ -83,7 +79,10 @@ object GeminiLiveTester {
         }
 
         // d. Open Gemini Live WebSocket
-        Diag.log("GEMINI_TEST", "Step D: Connecting to wss://$ENDPOINT_HOST$WS_PATH?key=...")
+        Diag.log(
+            "GEMINI_TEST",
+            "Step D: Connecting to wss://${GeminiLiveProtocol.HOST}${GeminiLiveProtocol.WS_PATH} with x-goog-api-key header"
+        )
         onProgressUpdate("Step D: Opening WebSocket...")
 
         val client = OkHttpClient.Builder()
@@ -91,9 +90,7 @@ object GeminiLiveTester {
             .connectTimeout(10, TimeUnit.SECONDS)
             .build()
 
-        val request = Request.Builder()
-            .url("wss://$ENDPOINT_HOST$WS_PATH?key=$key")
-            .build()
+        val request = GeminiLiveProtocol.webSocketRequest(key)
 
         val isConnected = AtomicBoolean(false)
         val setupAcknowledged = AtomicBoolean(false)
@@ -101,10 +98,9 @@ object GeminiLiveTester {
         val transcriptCount = AtomicInteger(0)
         val receivedAnyResponse = AtomicBoolean(false)
 
-        var activeWs: WebSocket? = null
         val openLatch = CountDownLatch(1)
 
-        activeWs = client.newWebSocket(request, object : WebSocketListener() {
+        val activeWs = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Diag.log("GEMINI_TEST", "WebSocket opened successfully (HTTP ${response.code})")
                 isConnected.set(true)
@@ -117,23 +113,19 @@ object GeminiLiveTester {
                 Diag.log("GEMINI_TEST", "Received message preview: $preview")
 
                 try {
-                    val json = JSONObject(text)
-                    if (json.has("setupComplete")) {
+                    val parsed = GeminiLiveProtocol.parseServerMessage(text)
+                    if (parsed.setupComplete) {
                         Diag.log("GEMINI_TEST", "Setup complete acknowledged by Gemini Live")
                         setupAcknowledged.set(true)
                     }
-
-                    val serverContent = json.optJSONObject("serverContent")
-                    val modelTurn = serverContent?.optJSONObject("modelTurn")
-                    val parts = modelTurn?.optJSONArray("parts")
-                    if (parts != null && parts.length() > 0) {
-                        for (i in 0 until parts.length()) {
-                            val partText = parts.getJSONObject(i).optString("text", "")
-                            if (partText.isNotBlank()) {
-                                transcriptCount.incrementAndGet()
-                                Diag.log("GEMINI_TEST", "Transcript received from Gemini: '$partText'")
-                            }
-                        }
+                    if (parsed.errorMessage != null) {
+                        connectionError.append(parsed.errorMessage)
+                        Diag.log("GEMINI_TEST", "Server error: ${parsed.errorMessage}")
+                    }
+                    val transcript = parsed.finalText ?: parsed.interimText
+                    if (!transcript.isNullOrBlank()) {
+                        transcriptCount.incrementAndGet()
+                        Diag.log("GEMINI_TEST", "Transcript received from Gemini: '$transcript'")
                     }
                 } catch (e: Exception) {
                     Diag.log("GEMINI_TEST", "Message parse error: ${e.message}")
@@ -155,7 +147,7 @@ object GeminiLiveTester {
         // Wait for connect
         val opened = openLatch.await(8, TimeUnit.SECONDS)
         if (!opened || !isConnected.get()) {
-            activeWs?.cancel()
+            activeWs.cancel()
             val verdict = "TEST FAILED at step D: Could not open WebSocket (${connectionError.ifBlank { "timeout" }})"
             Diag.log("GEMINI_TEST", verdict)
             onProgressUpdate(verdict)
@@ -166,21 +158,11 @@ object GeminiLiveTester {
         Diag.log("GEMINI_TEST", "Step E: Sending session setup message for $MODEL_NAME")
         onProgressUpdate("Step E: Sending setup message...")
 
-        val setupJson = JSONObject().apply {
-            put("setup", JSONObject().apply {
-                put("model", MODEL_NAME)
-                put("generationConfig", JSONObject().apply {
-                    put("responseModalities", JSONArray().apply { put("TEXT") })
-                })
-                put("systemInstruction", JSONObject().apply {
-                    put("parts", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("text", "You are a speech-to-text transcriber. Transcribe audio accurately.")
-                        })
-                    })
-                })
-            })
-        }
+        val setupJson = GeminiLiveProtocol.buildSetup(
+            model = MODEL_NAME,
+            isSmartMode = false,
+            systemInstructionText = "You are a speech-to-text transcriber. Transcribe audio accurately."
+        )
 
         val setupSent = activeWs.send(setupJson.toString())
         Diag.log("GEMINI_TEST", "Setup message sent: $setupSent. Payload: $setupJson")
@@ -202,10 +184,22 @@ object GeminiLiveTester {
         }
 
         if (!setupAcknowledged.get()) {
-            // Note: Some models or versions don't send explicit setupComplete, but let's check if connection is still alive
-            Diag.log("GEMINI_TEST", "Warning: No explicit setupComplete received within 5s, proceeding with audio stream...")
-        } else {
-            Diag.log("GEMINI_TEST", "Step F: Setup confirmed!")
+            activeWs.close(1000, "Setup was not acknowledged")
+            val verdict = "TEST FAILED at step F: No setupComplete from Gemini Live within 5s (${connectionError.ifBlank { "timeout" }})"
+            Diag.log("GEMINI_TEST", verdict)
+            onProgressUpdate(verdict)
+            return@withContext verdict
+        }
+        Diag.log("GEMINI_TEST", "Step F: Setup confirmed!")
+
+        val activityStarted = activeWs.send(GeminiLiveProtocol.buildActivityStart().toString())
+        Diag.log("GEMINI_TEST", "Sent activityStart: $activityStarted")
+        if (!activityStarted) {
+            activeWs.close(1000, "activityStart failed")
+            val verdict = "TEST FAILED at step F: Failed to send activityStart"
+            Diag.log("GEMINI_TEST", verdict)
+            onProgressUpdate(verdict)
+            return@withContext verdict
         }
 
         // g. Start mic, stream 8 seconds of audio while printing chunk counts and volume live
@@ -251,17 +245,7 @@ object GeminiLiveTester {
                 if (readBytes > 0) {
                     chunkIndex++
                     val audioBase64 = Base64.encodeToString(buffer, 0, readBytes, Base64.NO_WRAP)
-                    val frameJson = JSONObject().apply {
-                        put("realtimeInput", JSONObject().apply {
-                            put("mediaChunks", JSONArray().apply {
-                                put(JSONObject().apply {
-                                    put("mimeType", "audio/pcm;rate=16000")
-                                    put("data", audioBase64)
-                                })
-                            })
-                        })
-                    }
-                    activeWs.send(frameJson.toString())
+                    activeWs.send(GeminiLiveProtocol.buildAudioFrame(audioBase64).toString())
 
                     // Calculate volume (0 to 1 normalized)
                     var sumSq = 0.0
@@ -303,8 +287,9 @@ object GeminiLiveTester {
         }
 
         // i. Close session cleanly
-        Diag.log("GEMINI_TEST", "Step I: Closing WebSocket session cleanly...")
+        Diag.log("GEMINI_TEST", "Step I: Sending activityEnd and closing WebSocket session...")
         try {
+            activeWs.send(GeminiLiveProtocol.buildActivityEnd().toString())
             activeWs.close(1000, "Gemini live test completed")
         } catch (_: Exception) {}
 

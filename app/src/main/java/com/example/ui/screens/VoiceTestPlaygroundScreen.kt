@@ -90,6 +90,7 @@ import androidx.core.content.ContextCompat
 import com.example.audio.AudioNoiseGate
 import com.example.ui.viewmodel.PosViewModel
 import com.example.util.HapticHelper
+import com.example.voice.GeminiApiKey
 import com.example.voice.GeminiLiveSession
 import com.example.voice.VoiceAudioCapture
 
@@ -158,7 +159,7 @@ fun VoiceTestPlaygroundScreen(
             return
         }
 
-        if (apiKey.isBlank()) {
+        if (!GeminiApiKey.isUsable(apiKey)) {
             statusCaption = "Please enter Gemini API key in Settings"
             return
         }

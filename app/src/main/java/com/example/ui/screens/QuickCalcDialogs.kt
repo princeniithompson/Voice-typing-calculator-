@@ -434,7 +434,7 @@ fun QuickCalcSettingsDialog(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Filters out loud background kitchen chatter and plate clatter. Current: ${String.format("%.1f", localThreshold)} dB",
+                    text = "Mic audio quieter than this is not sent. Speech is usually -40 to -20 dBFS. Current: ${String.format("%.0f", localThreshold)} dBFS",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -444,8 +444,8 @@ fun QuickCalcSettingsDialog(
                         localThreshold = it
                         viewModel.setNoiseThreshold(it)
                     },
-                    valueRange = -2.0f..6.0f,
-                    steps = 16,
+                    valueRange = -70f..-15f,
+                    steps = 54,
                     colors = SliderDefaults.colors(
                         thumbColor = MaterialTheme.colorScheme.primary,
                         activeTrackColor = MaterialTheme.colorScheme.primary,

@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Quick calc</string>
+    <string name="currency_symbol">GH₵</string>
+    <string name="manual_label">Manual</string>
+    <string name="voice_label">Voice</string>
+    <string name="hold_to_speak">Hold to speak</string>
+    <string name="swipe_to_lock">Swipe left to lock</string>
+    <string name="listening_active">Listening…</string>
+    <string name="listening_paused">Paused</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "name": "Quick calc",
+  "description": "Hybrid voice calculator and food POS for cashier stations with live speech recognition, custom menu pricing, and dual manual/voice calculations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

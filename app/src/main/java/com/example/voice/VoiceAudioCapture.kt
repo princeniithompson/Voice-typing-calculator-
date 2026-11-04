@@ -88,12 +88,12 @@ class VoiceAudioCapture(
                     if (readBytes > 0) {
                         totalChunks++
                         totalBytes += readBytes
-                        val chunkCopy = buffer.copyOf(readBytes)
-                        onAudioChunk(chunkCopy, readBytes)
-
-                        // Compute decibels and normalized volume (0.0 to 1.0)
+                        // Update the noise gate before the send callback so this chunk
+                        // is judged on its own level, not the previous buffer.
                         val db = computeRmsDb(buffer, readBytes)
                         onRmsDbChanged?.invoke(db)
+                        val chunkCopy = buffer.copyOf(readBytes)
+                        onAudioChunk(chunkCopy, readBytes)
 
                         // Rate limit volume log: once per second
                         val now = System.currentTimeMillis()

@@ -48,16 +48,22 @@ class VoiceTranscriptionManager(
      */
     fun startListening(apiKey: String = "") {
         if (_isListening.value) return
-        _isListening.value = true
-
-        if (apiKey.isBlank()) {
+        val key = GeminiApiKey.normalize(apiKey)
+        if (key.isEmpty()) {
             onStatusCaptionChanged?.invoke("Voice needs API Key (Tap ⋮ > Settings)")
             return
         }
+        _isListening.value = true
 
-        val customVocabulary = menuItemsProvider().map { it.name }
+        val customVocabulary = menuItemsProvider().map { it.name }.filter { it.isNotBlank() }.ifEmpty {
+            listOf("Banku", "Fried Fish", "Waakye", "Kelewele", "Salad", "Plantain", "Tuna", "Rice", "Chicken", "Okro")
+        }
         onStatusCaptionChanged?.invoke("Connecting Gemini Live...")
-        geminiSession.startSession(apiKey, customVocabulary)
+        geminiSession.startSession(
+            apiKey = key,
+            customVocabulary = customVocabulary,
+            isSmartMode = false
+        )
 
         val captureStarted = audioCapture.startCapture(
             scope = scope,

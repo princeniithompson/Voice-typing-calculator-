@@ -16,6 +16,7 @@ import com.example.pricing.PricingRepository
 import com.example.manual.ManualKeypadHandler
 import com.example.manual.ManualState
 import com.example.voice.DetectedVoiceItem
+import com.example.voice.GeminiApiKey
 import com.example.voice.VoiceMode
 import com.example.voice.VoiceState
 import com.example.voice.VoiceTranscriptionManager
@@ -36,7 +37,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     val orderRepository = OrderRepository(database.orderDao())
     val pricingRepository = PricingRepository(database.menuItemDao())
 
-    val noiseGate = AudioNoiseGate(initialThresholdDb = -1.5f)
+    val noiseGate = AudioNoiseGate(initialThresholdDb = -45f)
     private val manualHandler = ManualKeypadHandler()
 
     val voiceTranscriptionManager = VoiceTranscriptionManager(
@@ -52,22 +53,14 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     val isVoiceAssistEnabled: StateFlow<Boolean> = _isVoiceAssistEnabled.asStateFlow()
 
     // Gemini API Key management
-    private fun getBuildConfigApiKey(): String {
-        return try {
-            val field = com.example.BuildConfig::class.java.getField("GEMINI_API_KEY")
-            (field.get(null) as? String) ?: ""
-        } catch (_: Exception) {
-            ""
-        }
-    }
-
     private val _geminiApiKey = MutableStateFlow(
-        prefs.getString("prefs_gemini_api_key", null)?.takeIf { it.isNotBlank() } ?: getBuildConfigApiKey()
+        prefs.getString("prefs_gemini_api_key", null)?.let { GeminiApiKey.normalize(it) }?.takeIf { it.isNotEmpty() }
+            ?: GeminiApiKey.fromBuildConfig()
     )
     val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
 
     fun saveGeminiApiKey(key: String) {
-        val trimmed = key.trim()
+        val trimmed = GeminiApiKey.normalize(key)
         _geminiApiKey.value = trimmed
         prefs.edit().putString("prefs_gemini_api_key", trimmed).apply()
         com.example.diag.Diag.updateApiKey(trimmed)

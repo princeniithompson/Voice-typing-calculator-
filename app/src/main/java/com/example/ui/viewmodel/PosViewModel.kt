@@ -438,9 +438,10 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             statusCaption = "Batch $nextBatchNum: GH₵ ${String.format(java.util.Locale.US, "%.2f", batchSubtotal)} (Total: GH₵ ${String.format(java.util.Locale.US, "%.2f", newAccumulatedTotal)})"
         )
 
-        // Cleanly restart Gemini Live stream for the next section so voice context starts fresh
-        voiceTranscriptionManager.evaluateVoice()
-        voiceTranscriptionManager.restartSession(_geminiApiKey.value)
+        // Cleanly restart Gemini Live stream for the next section after final transcript is processed
+        voiceTranscriptionManager.evaluateVoice {
+            voiceTranscriptionManager.restartSession(_geminiApiKey.value)
+        }
     }
 
     /**

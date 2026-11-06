@@ -32,6 +32,7 @@ class VoiceTranscriptionManager(
      */
     var onVoiceResultUpdated: ((transcript: String, items: List<DetectedVoiceItem>, total: BigDecimal, rawModelOutput: String) -> Unit)? = null
     var onStatusCaptionChanged: ((String?) -> Unit)? = null
+    var onFinalTranscriptProcessed: (() -> Unit)? = null
 
     private val orderParser by lazy { VoiceOrderParser(menuItemsProvider) }
 
@@ -48,6 +49,8 @@ class VoiceTranscriptionManager(
                         // Smart Mode OFF: Pass raw verbatim transcript directly without smart polishing
                         onVoiceResultUpdated?.invoke(rawText, emptyList(), BigDecimal.ZERO, rawModelOutput)
                     }
+                    onFinalTranscriptProcessed?.invoke()
+                    onFinalTranscriptProcessed = null // one-shot
                 }
             }
         }
@@ -146,7 +149,8 @@ class VoiceTranscriptionManager(
     /**
      * Triggers model final polishing pass when user taps the Equal (=) button.
      */
-    fun evaluateVoice() {
+    fun evaluateVoice(onDone: (() -> Unit)? = null) {
+        onFinalTranscriptProcessed = onDone
         geminiSession.sendActivityEnd()
     }
 

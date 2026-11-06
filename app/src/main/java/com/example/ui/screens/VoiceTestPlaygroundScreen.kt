@@ -175,7 +175,8 @@ fun VoiceTestPlaygroundScreen(
             apiKey = apiKey,
             customVocabulary = unifiedVocabulary,
             isSmartMode = isSmartMode,
-            primaryLanguage = primaryLanguage
+            primaryLanguage = primaryLanguage,
+            disableVAD = false
         )
 
         val captureStarted = audioCapture.startCapture(

@@ -46,8 +46,11 @@ class GeminiLiveSession(
     private var webSocket: WebSocket? = null
 
     private val finalizedTranscript = StringBuilder()
+    private val finalizedRawTranscript = StringBuilder()
     @Volatile
     private var currentInterimText = ""
+    @Volatile
+    private var currentInterimRawText = ""
 
     @Volatile
     var isSetupAccepted: Boolean = false
@@ -84,7 +87,8 @@ class GeminiLiveSession(
         customVocabulary: List<String> = emptyList(),
         isSmartMode: Boolean = true,
         primaryLanguage: String = "Detect",
-        systemInstructionText: String? = null
+        systemInstructionText: String? = null,
+        disableVAD: Boolean = true
     ) {
         if (_connectionState.value == SessionState.CONNECTED || _connectionState.value == SessionState.CONNECTING) {
             return
@@ -94,7 +98,9 @@ class GeminiLiveSession(
         pcmQueue.clear()
         queuedBytesCount = 0
         finalizedTranscript.clear()
+        finalizedRawTranscript.clear()
         currentInterimText = ""
+        currentInterimRawText = ""
         _liveTranscript.value = ""
         _rawModelResponse.value = ""
 
@@ -132,7 +138,7 @@ class GeminiLiveSession(
                     "Gemini Live WebSocket opened successfully (code=${response.code}). Sending setup payload for $modelName."
                 )
                 _connectionState.value = SessionState.CONNECTED
-                sendSetupMessage(ws, customVocabulary, isSmartMode, primaryLanguage)
+                sendSetupMessage(ws, customVocabulary, isSmartMode, primaryLanguage, disableVAD)
 
                 // 5-second setup timeout watcher
                 scope.launch {
@@ -300,6 +306,8 @@ class GeminiLiveSession(
             isSetupAccepted = false
             pcmQueue.clear()
             queuedBytesCount = 0
+            finalizedRawTranscript.clear()
+            _rawModelResponse.value = ""
             _connectionState.value = SessionState.DISCONNECTED
             com.example.diag.Diag.isGeminiConnected = false
         }
@@ -309,7 +317,8 @@ class GeminiLiveSession(
         ws: WebSocket,
         customVocabulary: List<String>,
         isSmartMode: Boolean,
-        primaryLanguage: String = "en-US"
+        primaryLanguage: String = "en-US",
+        disableVAD: Boolean = true
     ) {
         try {
             val vocabArray = JSONArray()
@@ -338,7 +347,7 @@ class GeminiLiveSession(
                     })
                     put("realtimeInputConfig", JSONObject().apply {
                         put("automaticActivityDetection", JSONObject().apply {
-                            put("disabled", true)
+                            put("disabled", !disableVAD)
                         })
                     })
                 })
@@ -396,6 +405,7 @@ class GeminiLiveSession(
                 val interimText = interimObj.optString("text", "")
                 if (interimText.isNotBlank()) {
                     currentInterimText = interimText
+                    currentInterimRawText = interimText
                     updateCombinedTranscript(interimText, isFinal = false)
                 }
             }
@@ -410,7 +420,12 @@ class GeminiLiveSession(
                         finalizedTranscript.append(" ")
                     }
                     finalizedTranscript.append(finalText)
+                    if (finalizedRawTranscript.isNotEmpty() && !finalizedRawTranscript.endsWith(" ")) {
+                        finalizedRawTranscript.append(" ")
+                    }
+                    finalizedRawTranscript.append(finalText)
                     currentInterimText = ""
+                    currentInterimRawText = ""
                     com.example.diag.Diag.recordFinalTranscriptReceived(finalText)
                     updateCombinedTranscript(finalText, isFinal = true)
                 }
@@ -430,6 +445,7 @@ class GeminiLiveSession(
                     val text = sb.toString()
                     if (text.isNotBlank()) {
                         currentInterimText = text
+                        currentInterimRawText = text
                         updateCombinedTranscript(text, isFinal = false)
                     }
                 }
@@ -441,16 +457,24 @@ class GeminiLiveSession(
     }
 
     private fun updateCombinedTranscript(newChunk: String, isFinal: Boolean) {
-        val full = if (currentInterimText.isNotBlank()) {
+        val fullProcessed = if (currentInterimText.isNotBlank()) {
             if (finalizedTranscript.isBlank()) currentInterimText
             else "${finalizedTranscript.toString().trim()} $currentInterimText"
         } else {
             finalizedTranscript.toString().trim()
         }
 
-        val display = full.trim()
+        val fullRaw = if (currentInterimRawText.isNotBlank()) {
+            if (finalizedRawTranscript.isBlank()) currentInterimRawText
+            else "${finalizedRawTranscript.toString().trim()} $currentInterimRawText"
+        } else {
+            finalizedRawTranscript.toString().trim()
+        }
+
+        val display = fullProcessed.trim()
+        val raw = fullRaw.trim()
         _liveTranscript.value = display
-        _rawModelResponse.value = display
+        _rawModelResponse.value = raw
 
         val elapsedMs = System.currentTimeMillis() - com.example.diag.Diag.sessionStartMs
         val typeStr = if (isFinal) "FINAL" else "INTERIM"
@@ -458,11 +482,11 @@ class GeminiLiveSession(
         com.example.diag.Diag.recordTranscriptReceived(newChunk)
         com.example.diag.Diag.log(
             "GEMINI",
-            "Transcript ($typeStr, +${elapsedMs}ms): '$newChunk' | Full: '$display'"
+            "Transcript ($typeStr, +${elapsedMs}ms): '$newChunk' | Full: '$display' | Raw: '$raw'"
         )
         com.example.diag.Diag.log(
             "GEMINI_RAW_RESPONSE",
-            "Raw Gemini model output ($typeStr): '$display'"
+            "Raw Gemini model output ($typeStr): '$raw'"
         )
 
         scope.launch(Dispatchers.Default) {

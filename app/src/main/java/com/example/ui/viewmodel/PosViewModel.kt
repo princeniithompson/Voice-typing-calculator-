@@ -36,13 +36,14 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     val orderRepository = OrderRepository(database.orderDao())
     val pricingRepository = PricingRepository(database.menuItemDao())
 
-    val noiseGate = AudioNoiseGate(initialThresholdDb = -1.5f)
+    val noiseGate = AudioNoiseGate(initialThresholdDb = -45.0f)
     private val manualHandler = ManualKeypadHandler()
 
     val voiceTranscriptionManager = VoiceTranscriptionManager(
         scope = viewModelScope,
         noiseGate = noiseGate,
-        menuItemsProvider = { pricingRepository.cachedItems }
+        menuItemsProvider = { pricingRepository.cachedItems },
+        isSmartTranscriptionEnabledProvider = { _isSmartTranscriptionEnabled.value }
     )
 
     // 1. Surface Toggle: false = Surface A (Classic Google Calculator parity), true = Surface B (Voice assist)
@@ -158,15 +159,25 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     val testSystemInstruction: StateFlow<String> = _testSystemInstruction.asStateFlow()
 
     private val _testVocabularyList = MutableStateFlow(
-        prefs.getStringSet("prefs_test_vocabulary", setOf("Banku", "Fried Fish", "Waakye", "Kelewele"))?.toList()
-            ?: listOf("Banku", "Fried Fish", "Waakye", "Kelewele")
+        prefs.getStringSet(
+            "prefs_test_vocabulary",
+            setOf("princeniithompson@gmail.com", "30first", "Banku", "Fried Fish", "Waakye", "Kelewele")
+        )?.toList() ?: listOf("princeniithompson@gmail.com", "30first", "Banku", "Fried Fish", "Waakye", "Kelewele")
     )
     val testVocabularyList: StateFlow<List<String>> = _testVocabularyList.asStateFlow()
+
+    init {
+        com.example.voice.SharedVocabularyManager.setTerms(_testVocabularyList.value)
+    }
 
     fun toggleSmartTranscription(enabled: Boolean) {
         _isSmartTranscriptionEnabled.value = enabled
         prefs.edit().putBoolean("prefs_smart_transcription", enabled).apply()
         com.example.diag.Diag.log("GEMINI", "Smart transcription mode toggled to: $enabled")
+        if (voiceTranscriptionManager.isListening.value) {
+            voiceTranscriptionManager.restartSession(_geminiApiKey.value)
+            com.example.diag.Diag.log("GEMINI", "Restarted active Gemini session to apply new Smart Mode: $enabled")
+        }
     }
 
     fun setTestPrimaryLanguage(lang: String) {
@@ -184,6 +195,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
         if (trimmed.isNotBlank()) {
             val updated = (_testVocabularyList.value + trimmed).distinct()
             _testVocabularyList.value = updated
+            com.example.voice.SharedVocabularyManager.addTerm(trimmed)
             prefs.edit().putStringSet("prefs_test_vocabulary", updated.toSet()).apply()
         }
     }
@@ -191,6 +203,7 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     fun removeTestVocabulary(phrase: String) {
         val updated = _testVocabularyList.value.filter { it != phrase }
         _testVocabularyList.value = updated
+        com.example.voice.SharedVocabularyManager.removeTerm(phrase)
         prefs.edit().putStringSet("prefs_test_vocabulary", updated.toSet()).apply()
     }
 
@@ -216,8 +229,8 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
             pricingRepository.getItemsSnapshot()
         }
 
-        voiceTranscriptionManager.onVoiceResultUpdated = { transcript, items, total ->
-            updateVoiceTranscription(transcript, items, total)
+        voiceTranscriptionManager.onVoiceResultUpdated = { transcript, items, total, rawOutput ->
+            updateVoiceTranscription(transcript, items, total, rawOutput)
         }
         voiceTranscriptionManager.onStatusCaptionChanged = { caption ->
             setVoiceStatusCaption(caption)
@@ -333,92 +346,293 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- Voice Bar State Machine & Actions (Changes VoiceState ONLY. Speech never touches ManualState.) ---
-    fun onHoldStart() {
-        if (_voiceState.value.mode == VoiceMode.LOCKED) return
-        _voiceState.value = _voiceState.value.copy(mode = VoiceMode.LISTENING)
-        com.example.diag.Diag.log("VOICE_STATE", "Mic state -> LISTENING, reason: user hold start")
-        voiceTranscriptionManager.startListening(_geminiApiKey.value)
-    }
-
-    fun onHoldRelease(swipedToLock: Boolean) {
-        if (_voiceState.value.mode == VoiceMode.LOCKED) return
-        if (swipedToLock) {
-            _voiceState.value = _voiceState.value.copy(mode = VoiceMode.LOCKED)
-            prefs.edit().putBoolean("prefs_voice_locked", true).apply()
-            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> LOCKED, reason: user swiped to lock")
+    
+    /**
+     * Mic button tap handler.
+     * IDLE -> start listening.
+     * LISTENING/PAUSED -> finish session, commit order to history, and return to IDLE.
+     */
+    fun onMicTap() {
+        val currentMode = _voiceState.value.mode
+        if (currentMode == VoiceMode.IDLE) {
+            _voiceState.value = _voiceState.value.copy(
+                mode = VoiceMode.LISTENING,
+                liveTranscript = "",
+                detectedItems = emptyList(),
+                total = BigDecimal.ZERO,
+                pendingItems = emptyList(),
+                pendingTotal = BigDecimal.ZERO,
+                accumulatedBatches = emptyList(),
+                lastBatchTotal = null,
+                isEvaluated = false,
+                statusCaption = "Listening... tap = to calculate"
+            )
+            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> LISTENING, reason: user tapped mic")
             voiceTranscriptionManager.startListening(_geminiApiKey.value)
         } else {
-            _voiceState.value = _voiceState.value.copy(mode = VoiceMode.IDLE)
-            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> IDLE, reason: user released hold")
+            // LISTENING or PAUSED -> User tapped Finish / Stop
+            commitVoiceOrderToHistory()
+            _voiceState.value = _voiceState.value.copy(
+                mode = VoiceMode.IDLE,
+                statusCaption = "Tap the mic to start"
+            )
+            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> IDLE, reason: user tapped finish mic")
             voiceTranscriptionManager.stopListening()
         }
     }
 
-    fun onVoiceLockToggle() {
-        if (_voiceState.value.mode == VoiceMode.LOCKED || _voiceState.value.mode == VoiceMode.PAUSED) {
-            _voiceState.value = _voiceState.value.copy(mode = VoiceMode.IDLE)
-            prefs.edit().putBoolean("prefs_voice_locked", false).apply()
-            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> IDLE, reason: user unlocked mic button")
-            voiceTranscriptionManager.stopListening()
-        } else {
-            _voiceState.value = _voiceState.value.copy(mode = VoiceMode.LOCKED)
-            prefs.edit().putBoolean("prefs_voice_locked", true).apply()
-            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> LOCKED, reason: user locked mic button")
-            voiceTranscriptionManager.startListening(_geminiApiKey.value)
+    /**
+     * Voice Equal (=) button tap handler in the voice bar.
+     * 1. Evaluates current batch speech with EchoGuardFilter to prevent duplicate number echoes.
+     * 2. Accumulates batch to running session total without clearing the display container.
+     * 3. Cleanly restarts Gemini Live transcription stream for the next section.
+     */
+    fun onVoiceEqualTap() {
+        val state = _voiceState.value
+        val rawTranscript = state.liveTranscript.ifBlank { "0" }
+
+        // Filter out any standalone repetition of the previous batch total (e.g. "56, plus 2 cups...")
+        val filteredTranscript = com.example.voice.EchoGuardFilter.filterEchoedTotal(rawTranscript, state.lastBatchTotal)
+        val parseResult = voiceTranscriptionManager.parseTranscriptManually(filteredTranscript.ifBlank { rawTranscript })
+
+        val batchSubtotal = if (parseResult.total > BigDecimal.ZERO) parseResult.total else state.pendingTotal
+        val batchItems = if (parseResult.items.isNotEmpty()) parseResult.items else state.pendingItems
+
+        if (batchSubtotal <= BigDecimal.ZERO && batchItems.isEmpty()) {
+            com.example.diag.Diag.log("VOICE_STATE", "Equal tapped with no new items; continuing stream.")
+            return
         }
+
+        val nextBatchNum = state.accumulatedBatches.size + 1
+        val itemsSummary = if (batchItems.isNotEmpty()) {
+            batchItems.joinToString(", ") { "${it.quantity} ${it.name}" }
+        } else {
+            rawTranscript
+        }
+
+        val newBatch = com.example.voice.VoiceBatch(
+            batchNumber = nextBatchNum,
+            subtotal = batchSubtotal,
+            itemsSummary = itemsSummary,
+            items = batchItems
+        )
+
+        val updatedBatches = state.accumulatedBatches + newBatch
+        val newAccumulatedTotal = updatedBatches.fold(BigDecimal.ZERO) { acc, b -> acc.add(b.subtotal) }
+        val allAccumulatedItems = updatedBatches.flatMap { it.items }
+
+        com.example.diag.Diag.log(
+            "VOICE_STATE",
+            "Batch $nextBatchNum calculated: subtotal=GH₵ $batchSubtotal, newGrandTotal=GH₵ $newAccumulatedTotal"
+        )
+
+        _voiceState.value = state.copy(
+            total = newAccumulatedTotal,
+            detectedItems = allAccumulatedItems,
+            accumulatedBatches = updatedBatches,
+            lastBatchTotal = batchSubtotal,
+            liveTranscript = "",
+            pendingItems = emptyList(),
+            pendingTotal = BigDecimal.ZERO,
+            isEvaluated = true,
+            statusCaption = "Batch $nextBatchNum: GH₵ ${String.format(java.util.Locale.US, "%.2f", batchSubtotal)} (Total: GH₵ ${String.format(java.util.Locale.US, "%.2f", newAccumulatedTotal)})"
+        )
+
+        // Cleanly restart Gemini Live stream for the next section so voice context starts fresh
+        voiceTranscriptionManager.evaluateVoice()
+        voiceTranscriptionManager.restartSession(_geminiApiKey.value)
     }
 
-    fun onVoicePauseToggle() {
-        if (_voiceState.value.mode == VoiceMode.LOCKED) {
-            _voiceState.value = _voiceState.value.copy(mode = VoiceMode.PAUSED)
+    /**
+     * Pause / Resume toggle button handler.
+     */
+    fun onPauseTap() {
+        val currentMode = _voiceState.value.mode
+        if (currentMode == VoiceMode.LISTENING) {
+            _voiceState.value = _voiceState.value.copy(
+                mode = VoiceMode.PAUSED,
+                statusCaption = "Paused. The mic is muted"
+            )
             com.example.diag.Diag.log("VOICE_STATE", "Mic state -> PAUSED, reason: user tapped pause")
-            voiceTranscriptionManager.stopListening()
-        } else if (_voiceState.value.mode == VoiceMode.PAUSED) {
-            _voiceState.value = _voiceState.value.copy(mode = VoiceMode.LOCKED)
-            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> LOCKED (resumed), reason: user tapped resume")
-            voiceTranscriptionManager.startListening(_geminiApiKey.value)
+            voiceTranscriptionManager.pauseStreaming()
+        } else if (currentMode == VoiceMode.PAUSED) {
+            _voiceState.value = _voiceState.value.copy(
+                mode = VoiceMode.LISTENING,
+                statusCaption = "Listening... tap the mic to finish"
+            )
+            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> LISTENING, reason: user tapped resume")
+            voiceTranscriptionManager.resumeStreaming()
         }
     }
 
-    fun onClearVoiceCard() {
-        // Bar AC clears Voice card and saves order to history if non-empty
-        val currentItems = _voiceState.value.detectedItems
-        val currentTotal = _voiceState.value.total
-        com.example.diag.Diag.log("VOICE_STATE", "Voice card cleared, reason: user tapped voice AC pill")
-        com.example.diag.Diag.log("CALC", "Voice calc reset: items=0, total=0, target=VOICE_STATE")
+    /**
+     * AC pill handler (while LISTENING or PAUSED).
+     * Saves current session to History, clears Voice card, and restarts Gemini session.
+     */
+    fun onACTap() {
+        commitVoiceOrderToHistory()
 
-        if (currentItems.isNotEmpty() && currentTotal > BigDecimal.ZERO) {
-            saveVoiceOrderToHistory(currentItems, currentTotal.toDouble())
-        }
+        val isCurrentlyPaused = _voiceState.value.mode == VoiceMode.PAUSED
 
-        _voiceState.value = VoiceState(
+        // Clear Voice card completely
+        _voiceState.value = _voiceState.value.copy(
             liveTranscript = "",
             detectedItems = emptyList(),
             total = BigDecimal.ZERO,
-            mode = if (_voiceState.value.mode == VoiceMode.PAUSED) VoiceMode.PAUSED else if (_voiceState.value.mode == VoiceMode.LOCKED) VoiceMode.LOCKED else VoiceMode.IDLE
+            pendingItems = emptyList(),
+            pendingTotal = BigDecimal.ZERO,
+            accumulatedBatches = emptyList(),
+            lastBatchTotal = null,
+            isEvaluated = false,
+            statusCaption = "Saved to history. New order started."
         )
+
+        // Restart clean Gemini session
+        voiceTranscriptionManager.restartSession(_geminiApiKey.value)
+
+        if (isCurrentlyPaused) {
+            voiceTranscriptionManager.pauseStreaming()
+        }
+
+        // Reset status caption back to normal after 2 seconds
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(2000)
+            val currentMode = _voiceState.value.mode
+            val newCaption = if (currentMode == VoiceMode.PAUSED) {
+                "Paused. The mic is muted"
+            } else if (currentMode == VoiceMode.LISTENING) {
+                "Listening... tap the mic to finish"
+            } else {
+                "Tap the mic to start"
+            }
+            _voiceState.value = _voiceState.value.copy(statusCaption = newCaption)
+        }
     }
+
+    /**
+     * 60-second silence safeguard trigger.
+     */
+    fun onSilenceAutoPause() {
+        if (_voiceState.value.mode == VoiceMode.LISTENING) {
+            _voiceState.value = _voiceState.value.copy(
+                mode = VoiceMode.PAUSED,
+                statusCaption = "Paused: no speech heard"
+            )
+            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> PAUSED, reason: 60s silence timeout")
+            voiceTranscriptionManager.pauseStreaming()
+        }
+    }
+
+    /**
+     * App backgrounded or screen turned off handler.
+     */
+    fun onAppBackgrounded() {
+        if (_voiceState.value.mode != VoiceMode.IDLE) {
+            _voiceState.value = _voiceState.value.copy(
+                mode = VoiceMode.IDLE,
+                statusCaption = "Tap the mic to start"
+            )
+            com.example.diag.Diag.log("VOICE_STATE", "Mic state -> IDLE, reason: app backgrounded")
+            voiceTranscriptionManager.stopListening()
+        }
+    }
+
+    // Backward-compatibility wrappers for old callers
+    fun onHoldStart() { onMicTap() }
+    fun onHoldRelease(swipedToLock: Boolean) { /* Taps only */ }
+    fun onVoiceLockToggle() { onMicTap() }
+    fun onVoicePauseToggle() { onPauseTap() }
+    fun onClearVoiceCard() { onACTap() }
 
     // --- Voice Transcript & Total Updates (Simulated / Live Flow: ONLY modifies VoiceState) ---
     fun updateVoiceTranscription(
         transcript: String,
         detectedItems: List<DetectedVoiceItem>,
-        total: BigDecimal
+        total: BigDecimal,
+        rawModelOutput: String = ""
     ) {
-        // Speech NEVER touches ManualState!
+        val currentState = _voiceState.value
+        val effectiveRaw = rawModelOutput.ifBlank { transcript }
         com.example.diag.Diag.log(
             "CALC",
-            "Voice calc update: transcript='$transcript', items=${detectedItems.size}, total=$total, target=VOICE_STATE"
+            "Voice calc update: transcript='$transcript', items=${detectedItems.size}, total=$total, isEvaluated=${currentState.isEvaluated}"
         )
-        _voiceState.value = _voiceState.value.copy(
-            liveTranscript = transcript,
-            detectedItems = detectedItems,
-            total = total
+        com.example.diag.Diag.log(
+            "GEMINI_RAW_RESPONSE",
+            "Raw Gemini Model Response: '$effectiveRaw'"
         )
+        if (currentState.isEvaluated) {
+            _voiceState.value = currentState.copy(
+                liveTranscript = transcript,
+                rawModelOutput = effectiveRaw,
+                detectedItems = detectedItems,
+                total = total,
+                pendingItems = detectedItems,
+                pendingTotal = total
+            )
+        } else {
+            _voiceState.value = currentState.copy(
+                liveTranscript = transcript,
+                rawModelOutput = effectiveRaw,
+                pendingItems = detectedItems,
+                pendingTotal = total
+            )
+        }
     }
 
     fun setVoiceStatusCaption(caption: String?) {
         _voiceState.value = _voiceState.value.copy(statusCaption = caption)
+    }
+
+    /**
+     * Commits all accumulated batches from the current voice session to the database.
+     * Preserves individual batch breakdowns (e.g. Batch 1, Batch 2...) in order item entities.
+     */
+    private fun commitVoiceOrderToHistory() {
+        val state = _voiceState.value
+        val batches = state.accumulatedBatches
+        val grandTotal = state.total.toDouble()
+
+        if (grandTotal <= 0.0 && batches.isEmpty()) return
+
+        viewModelScope.launch {
+            val orderItems = if (batches.isNotEmpty()) {
+                batches.map { batch ->
+                    OrderItemEntity(
+                        orderId = 0,
+                        menuItemId = 0,
+                        name = "Batch ${batch.batchNumber}: ${batch.itemsSummary}",
+                        unitPrice = batch.subtotal.toDouble(),
+                        quantity = 1,
+                        subtotal = batch.subtotal.toDouble(),
+                        unitLabel = "${batch.batchNumber}-in-${batches.size}"
+                    )
+                }
+            } else {
+                state.detectedItems.map { item ->
+                    OrderItemEntity(
+                        orderId = 0,
+                        menuItemId = 0,
+                        name = item.name,
+                        unitPrice = item.unitPrice.toDouble(),
+                        quantity = item.quantity,
+                        subtotal = item.lineTotal.toDouble(),
+                        unitLabel = "1-in-1"
+                    )
+                }
+            }
+
+            val sessionType = if (batches.size > 1) "${batches.size}-in-1 Session" else "1-in-1 Session"
+
+            orderRepository.createOrder(
+                orderType = sessionType,
+                subtotal = grandTotal,
+                grandTotal = grandTotal,
+                paymentMethod = "VOICE",
+                items = orderItems
+            )
+            com.example.diag.Diag.log("VOICE_STATE", "Committed $sessionType to history: GH₵ $grandTotal")
+        }
     }
 
     private fun saveVoiceOrderToHistory(items: List<DetectedVoiceItem>, total: Double) {
@@ -431,14 +645,14 @@ class PosViewModel(application: Application) : AndroidViewModel(application) {
                     unitPrice = item.unitPrice.toDouble(),
                     quantity = item.quantity,
                     subtotal = item.lineTotal.toDouble(),
-                    unitLabel = ""
+                    unitLabel = "1-in-1"
                 )
             }
             orderRepository.createOrder(
-                orderType = "VOICE",
+                orderType = "1-in-1 Session",
                 subtotal = total,
                 grandTotal = total,
-                paymentMethod = "CASH",
+                paymentMethod = "VOICE",
                 items = orderItems
             )
         }

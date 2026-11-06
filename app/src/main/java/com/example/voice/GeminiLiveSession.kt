@@ -20,10 +20,11 @@ import okhttp3.WebSocketListener
 import okio.ByteString
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeUnit
 
 /**
- * Manages a Gemini Live streaming transcription session using model 'gemini-3.5-transcribe-live'.
+ * Manages a Gemini Live streaming transcription session using model 'models/gemini-3.5-transcribe-live'.
  * Streams 16kHz PCM audio frames over a bidirectional WebSocket connection and receives real-time
  * transcription text deltas.
  */
@@ -37,18 +38,30 @@ class GeminiLiveSession(
 ) {
     companion object {
         private const val LIVE_ENDPOINT_HOST = "generativelanguage.googleapis.com"
-        private const val LIVE_WS_PATH = "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
+        private const val LIVE_WS_PATH = "/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+        private const val MAX_QUEUE_BYTES = 64000 // ~2 seconds of 16kHz 16-bit mono PCM
     }
 
+    @Volatile
     private var webSocket: WebSocket? = null
-    private val accumulatedTranscript = StringBuilder()
+
+    private val finalizedTranscript = StringBuilder()
+    @Volatile
+    private var currentInterimText = ""
 
     @Volatile
     var isSetupAccepted: Boolean = false
         private set
 
+    private val pcmQueue = ConcurrentLinkedQueue<ByteArray>()
+    @Volatile
+    private var queuedBytesCount = 0
+
     private val _liveTranscript = MutableStateFlow("")
     val liveTranscript: StateFlow<String> = _liveTranscript.asStateFlow()
+
+    private val _rawModelResponse = MutableStateFlow("")
+    val rawModelResponse: StateFlow<String> = _rawModelResponse.asStateFlow()
 
     private val _transcriptDeltas = MutableSharedFlow<String>(extraBufferCapacity = 64)
     val transcriptDeltas: SharedFlow<String> = _transcriptDeltas.asSharedFlow()
@@ -78,8 +91,12 @@ class GeminiLiveSession(
         }
 
         isSetupAccepted = false
-        accumulatedTranscript.clear()
+        pcmQueue.clear()
+        queuedBytesCount = 0
+        finalizedTranscript.clear()
+        currentInterimText = ""
         _liveTranscript.value = ""
+        _rawModelResponse.value = ""
 
         com.example.diag.Diag.sessionStartMs = System.currentTimeMillis()
         com.example.diag.Diag.timeToFirstTranscriptMs = null
@@ -93,46 +110,53 @@ class GeminiLiveSession(
         _connectionState.value = SessionState.CONNECTING
         com.example.diag.Diag.log(
             "GEMINI",
-            "Starting Gemini Live session: model=$modelName, smartMode=$isSmartMode, language=$primaryLanguage, key=${com.example.diag.Diag.maskKey(apiKey)}"
+            "Starting Gemini Live session: model=$modelName, key=${com.example.diag.Diag.maskKey(apiKey)}"
         )
         com.example.diag.Diag.log(
             "NETWORK",
             "Outgoing connection: host=$LIVE_ENDPOINT_HOST, path=$LIVE_WS_PATH"
         )
 
-        val url = "wss://$LIVE_ENDPOINT_HOST$LIVE_WS_PATH?key=$apiKey"
-        val request = Request.Builder().url(url).build()
+        val url = "wss://$LIVE_ENDPOINT_HOST$LIVE_WS_PATH"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("x-goog-api-key", apiKey)
+            .build()
 
-        webSocket = client.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
+        val newWebSocket = client.newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(ws: WebSocket, response: Response) {
+                if (ws != webSocket) return // Guard against replaced socket
                 com.example.diag.Diag.recordGeminiConnected()
                 com.example.diag.Diag.log(
                     "GEMINI",
                     "Gemini Live WebSocket opened successfully (code=${response.code}). Sending setup payload for $modelName."
                 )
                 _connectionState.value = SessionState.CONNECTED
-                sendSetupMessage(webSocket, customVocabulary, isSmartMode, primaryLanguage, systemInstructionText)
+                sendSetupMessage(ws, customVocabulary, isSmartMode, primaryLanguage)
 
                 // 5-second setup timeout watcher
                 scope.launch {
                     delay(5000)
-                    if (!isSetupAccepted && _connectionState.value == SessionState.CONNECTED) {
+                    if (!isSetupAccepted && _connectionState.value == SessionState.CONNECTED && ws == webSocket) {
                         com.example.diag.Diag.recordSetupTimeout()
                     }
                 }
             }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
+            override fun onMessage(ws: WebSocket, text: String) {
+                if (ws != webSocket) return
                 val bytes = text.toByteArray(Charsets.UTF_8)
-                handleIncomingFrame("text", bytes.size, text)
+                handleIncomingFrame(ws, "text", bytes.size, text)
             }
 
-            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            override fun onMessage(ws: WebSocket, bytes: ByteString) {
+                if (ws != webSocket) return
                 val text = bytes.utf8()
-                handleIncomingFrame("binary", bytes.size, text)
+                handleIncomingFrame(ws, "binary", bytes.size, text)
             }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+                if (ws != webSocket) return
                 com.example.diag.Diag.isGeminiConnected = false
                 val code = response?.code
                 val responseBodyStr = try {
@@ -146,42 +170,104 @@ class GeminiLiveSession(
                 _connectionState.value = SessionState.ERROR
             }
 
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            override fun onClosing(ws: WebSocket, code: Int, reason: String) {
+                if (ws != webSocket) return
                 com.example.diag.Diag.isGeminiConnected = false
                 com.example.diag.Diag.log("GEMINI", "Gemini Live WebSocket closing (code=$code, reason='$reason')")
             }
 
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            override fun onClosed(ws: WebSocket, code: Int, reason: String) {
+                if (ws != webSocket) return
                 com.example.diag.Diag.isGeminiConnected = false
                 com.example.diag.Diag.log("GEMINI", "Gemini Live WebSocket closed (code=$code, reason='$reason')")
                 _connectionState.value = SessionState.DISCONNECTED
             }
         })
+
+        webSocket = newWebSocket
     }
 
     /**
-     * Sends raw PCM audio chunk to the Gemini Live session ONLY after setup is accepted.
+     * Sends raw PCM audio chunk to the Gemini Live session.
+     * Queues up to ~2s of audio until setup is accepted.
      */
     fun sendAudioChunk(pcmChunk: ByteArray, length: Int) {
         val ws = webSocket ?: return
-        if (_connectionState.value != SessionState.CONNECTED || !isSetupAccepted) return
+        if (_connectionState.value != SessionState.CONNECTED) return
 
+        val chunkData = pcmChunk.copyOf(length)
+
+        if (!isSetupAccepted) {
+            // Queue audio until setup completes
+            pcmQueue.add(chunkData)
+            queuedBytesCount += length
+            while (queuedBytesCount > MAX_QUEUE_BYTES && pcmQueue.isNotEmpty()) {
+                val dropped = pcmQueue.poll()
+                if (dropped != null) {
+                    queuedBytesCount -= dropped.size
+                }
+            }
+            return
+        }
+
+        // Setup complete: flush queue if any remains
+        flushQueuedAudio(ws)
+        sendSingleAudioFrame(ws, chunkData)
+    }
+
+    private fun flushQueuedAudio(ws: WebSocket) {
+        while (pcmQueue.isNotEmpty()) {
+            val chunk = pcmQueue.poll() ?: break
+            queuedBytesCount -= chunk.size
+            sendSingleAudioFrame(ws, chunk)
+        }
+    }
+
+    private fun sendSingleAudioFrame(ws: WebSocket, pcmData: ByteArray) {
         try {
-            val audioBase64 = Base64.encodeToString(pcmChunk, 0, length, Base64.NO_WRAP)
+            val audioBase64 = Base64.encodeToString(pcmData, 0, pcmData.size, Base64.NO_WRAP)
             val json = JSONObject().apply {
                 put("realtimeInput", JSONObject().apply {
-                    put("mediaChunks", JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("mimeType", "audio/pcm;rate=16000")
-                            put("data", audioBase64)
-                        })
+                    put("audio", JSONObject().apply {
+                        put("mimeType", "audio/pcm;rate=16000")
+                        put("data", audioBase64)
                     })
                 })
             }
             ws.send(json.toString())
-            com.example.diag.Diag.recordAudioChunkSent(length)
+            com.example.diag.Diag.recordAudioChunkSent(pcmData.size)
         } catch (e: Exception) {
             com.example.diag.Diag.logException("GEMINI", "Error sending audio chunk to Gemini Live", e)
+        }
+    }
+
+    fun sendActivityStart(ws: WebSocket? = webSocket) {
+        val socket = ws ?: return
+        try {
+            val json = JSONObject().apply {
+                put("realtimeInput", JSONObject().apply {
+                    put("activityStart", JSONObject())
+                })
+            }
+            socket.send(json.toString())
+            com.example.diag.Diag.log("GEMINI", "Sent activityStart signal to Gemini Live")
+        } catch (e: Exception) {
+            com.example.diag.Diag.logException("GEMINI", "Error sending activityStart", e)
+        }
+    }
+
+    fun sendActivityEnd(ws: WebSocket? = webSocket) {
+        val socket = ws ?: return
+        try {
+            val json = JSONObject().apply {
+                put("realtimeInput", JSONObject().apply {
+                    put("activityEnd", JSONObject())
+                })
+            }
+            socket.send(json.toString())
+            com.example.diag.Diag.log("GEMINI", "Sent activityEnd signal to Gemini Live")
+        } catch (e: Exception) {
+            com.example.diag.Diag.logException("GEMINI", "Error sending activityEnd", e)
         }
     }
 
@@ -189,8 +275,9 @@ class GeminiLiveSession(
      * Injects a local transcript line (used for simulated speech, testing, or offline fallback).
      */
     fun injectTranscript(text: String) {
-        accumulatedTranscript.clear()
-        accumulatedTranscript.append(text)
+        finalizedTranscript.clear()
+        currentInterimText = ""
+        finalizedTranscript.append(text)
         _liveTranscript.value = text
         com.example.diag.Diag.log("GEMINI", "Injected local transcript: '$text'")
         scope.launch(Dispatchers.Default) {
@@ -199,14 +286,20 @@ class GeminiLiveSession(
     }
 
     fun closeSession() {
+        val ws = webSocket
+        webSocket = null
         try {
             com.example.diag.Diag.log("GEMINI", "Closing Gemini Live WebSocket session")
-            webSocket?.close(1000, "User finished speech")
+            if (ws != null && isSetupAccepted) {
+                sendActivityEnd(ws)
+            }
+            ws?.close(1000, "User finished speech")
         } catch (e: Exception) {
             com.example.diag.Diag.logException("GEMINI", "Error closing WebSocket", e)
         } finally {
-            webSocket = null
             isSetupAccepted = false
+            pcmQueue.clear()
+            queuedBytesCount = 0
             _connectionState.value = SessionState.DISCONNECTED
             com.example.diag.Diag.isGeminiConnected = false
         }
@@ -216,62 +309,45 @@ class GeminiLiveSession(
         ws: WebSocket,
         customVocabulary: List<String>,
         isSmartMode: Boolean,
-        primaryLanguage: String,
-        systemInstructionText: String?
+        primaryLanguage: String = "en-US"
     ) {
         try {
-            val phrasesArray = JSONArray()
-            customVocabulary.forEach { phrasesArray.put(it) }
-            if (phrasesArray.length() == 0) {
-                val defaults = listOf("Banku", "Fried Fish", "Waakye", "Kelewele", "Salad", "Plantain", "Tuna", "Rice", "Chicken", "Okro")
-                defaults.forEach { phrasesArray.put(it) }
+            val vocabArray = JSONArray()
+            customVocabulary.distinct().filter { it.isNotBlank() }.forEach {
+                vocabArray.put(it)
             }
 
-            val langArray = JSONArray()
-            when (primaryLanguage) {
-                "Akan" -> langArray.put("ak")
-                "English" -> langArray.put("en-US")
-                "Afrikaans" -> langArray.put("af")
-                "Albanian" -> langArray.put("sq")
-                "Amharic" -> langArray.put("am")
-                else -> {
-                    langArray.put("en-GH")
-                    langArray.put("en-US")
+            val languageCodesArray = JSONArray().apply {
+                if (primaryLanguage.isNotBlank() && primaryLanguage != "Detect") {
+                    put(primaryLanguage)
+                } else {
+                    put("en-US")
                 }
             }
-
-            val instruction = systemInstructionText?.takeIf { it.isNotBlank() }
-                ?: "Transcribe cleanly, write numbers as digits, do not answer, comment or calculate."
 
             val setupJson = JSONObject().apply {
                 put("setup", JSONObject().apply {
                     put("model", modelName)
                     put("generationConfig", JSONObject().apply {
                         put("responseModalities", JSONArray().apply { put("TEXT") })
-                        put("speechConfig", JSONObject().apply {
-                            put("speechContexts", JSONArray().apply {
-                                put(JSONObject().apply {
-                                    put("phrases", phrasesArray)
-                                })
-                            })
-                        })
-                    })
-                    put("systemInstruction", JSONObject().apply {
-                        put("parts", JSONArray().apply {
-                            put(JSONObject().apply {
-                                put("text", instruction)
-                            })
-                        })
                     })
                     put("inputAudioTranscription", JSONObject().apply {
-                        put("mode", if (isSmartMode) "SMART" else "RAW")
-                        put("languageCodes", langArray)
-                        put("phrases", phrasesArray)
+                        put("mode", if (isSmartMode) "SMART" else "VERBATIM")
+                        put("languageCodes", languageCodesArray)
+                        put("customVocabulary", vocabArray)
+                    })
+                    put("realtimeInputConfig", JSONObject().apply {
+                        put("automaticActivityDetection", JSONObject().apply {
+                            put("disabled", true)
+                        })
                     })
                 })
             }
 
-            com.example.diag.Diag.log("GEMINI", "Final setup message payload: $setupJson")
+            com.example.diag.Diag.log(
+                "GEMINI",
+                "Final setup message payload (Smart Mode=${if (isSmartMode) "SMART" else "DEFAULT"}, Vocabulary terms=${vocabArray.length()}): $setupJson"
+            )
             val sent = ws.send(setupJson.toString())
             if (!sent) {
                 com.example.diag.Diag.log("GEMINI", "Failed to send setup message over WebSocket")
@@ -281,7 +357,7 @@ class GeminiLiveSession(
         }
     }
 
-    private fun handleIncomingFrame(frameType: String, sizeBytes: Int, jsonText: String) {
+    private fun handleIncomingFrame(ws: WebSocket, frameType: String, sizeBytes: Int, jsonText: String) {
         val snippet = jsonText.take(300)
         com.example.diag.Diag.log("GEMINI", "Message received (frame=$frameType, size=$sizeBytes bytes): $snippet")
 
@@ -289,12 +365,15 @@ class GeminiLiveSession(
             val root = JSONObject(jsonText)
             val rootKeys = root.keys().asSequence().toList().joinToString(",")
 
-            // Check for setup acknowledgement
+            // Check for setup completion acknowledgement
             val isSetupComplete = root.has("setupComplete") || root.has("setup_complete") || root.has("setupAck")
-            if (isSetupComplete || (!isSetupAccepted && (root.has("serverContent") || root.has("inputAudioTranscription")))) {
+            if (isSetupComplete || (!isSetupAccepted && root.has("serverContent"))) {
                 if (!isSetupAccepted) {
                     isSetupAccepted = true
                     com.example.diag.Diag.recordSetupAccepted()
+                    com.example.diag.Diag.log("GEMINI", "Setup complete! Sending activityStart and flushing queued PCM chunks.")
+                    sendActivityStart(ws)
+                    flushQueuedAudio(ws)
                 }
             }
 
@@ -302,63 +381,92 @@ class GeminiLiveSession(
                 "setupComplete"
             } else if (root.has("serverContent")) {
                 "serverContent"
-            } else if (root.has("inputAudioTranscription")) {
-                "inputAudioTranscription"
             } else {
                 rootKeys.ifBlank { "unknown" }
             }
 
             com.example.diag.Diag.recordMessageReceived(msgType)
 
-            // Extract transcript text from possible payload locations
-            val textBuilder = StringBuilder()
-            var isFinalTurn = false
+            val serverContent = root.optJSONObject("serverContent") ?: return
 
-            val serverContent = root.optJSONObject("serverContent")
-            if (serverContent != null) {
-                if (serverContent.optBoolean("turnComplete", false)) {
-                    isFinalTurn = true
+            // 1. Check interim transcription: serverContent.interimInputTranscription.text
+            val interimObj = serverContent.optJSONObject("interimInputTranscription")
+                ?: serverContent.optJSONObject("interim_input_transcription")
+            if (interimObj != null) {
+                val interimText = interimObj.optString("text", "")
+                if (interimText.isNotBlank()) {
+                    currentInterimText = interimText
+                    updateCombinedTranscript(interimText, isFinal = false)
                 }
-                val modelTurn = serverContent.optJSONObject("modelTurn")
-                if (modelTurn != null) {
-                    val parts = modelTurn.optJSONArray("parts")
-                    if (parts != null) {
-                        for (i in 0 until parts.length()) {
-                            val part = parts.getJSONObject(i)
-                            val t = part.optString("text", "")
-                            if (t.isNotEmpty()) textBuilder.append(t)
-                        }
+            }
+
+            // 2. Check final input transcription: serverContent.inputTranscription.text
+            val finalObj = serverContent.optJSONObject("inputTranscription")
+                ?: serverContent.optJSONObject("input_transcription")
+            if (finalObj != null) {
+                val finalText = finalObj.optString("text", "")
+                if (finalText.isNotBlank()) {
+                    if (finalizedTranscript.isNotEmpty() && !finalizedTranscript.endsWith(" ")) {
+                        finalizedTranscript.append(" ")
+                    }
+                    finalizedTranscript.append(finalText)
+                    currentInterimText = ""
+                    com.example.diag.Diag.recordFinalTranscriptReceived(finalText)
+                    updateCombinedTranscript(finalText, isFinal = true)
+                }
+            }
+
+            // 3. Fallback: modelTurn.parts
+            val modelTurn = serverContent.optJSONObject("modelTurn")
+            if (modelTurn != null && interimObj == null && finalObj == null) {
+                val parts = modelTurn.optJSONArray("parts")
+                if (parts != null) {
+                    val sb = StringBuilder()
+                    for (i in 0 until parts.length()) {
+                        val part = parts.getJSONObject(i)
+                        val t = part.optString("text", "")
+                        if (t.isNotEmpty()) sb.append(t)
+                    }
+                    val text = sb.toString()
+                    if (text.isNotBlank()) {
+                        currentInterimText = text
+                        updateCombinedTranscript(text, isFinal = false)
                     }
                 }
             }
 
-            val inputTranscription = root.optJSONObject("inputAudioTranscription") ?: root.optJSONObject("transcription")
-            if (inputTranscription != null) {
-                val t = inputTranscription.optString("text", "")
-                if (t.isNotEmpty()) textBuilder.append(t)
-            }
-
-            val extractedText = textBuilder.toString()
-            if (extractedText.isNotEmpty()) {
-                accumulatedTranscript.append(extractedText)
-                val currentText = accumulatedTranscript.toString().trim()
-                _liveTranscript.value = currentText
-
-                val elapsedMs = System.currentTimeMillis() - com.example.diag.Diag.sessionStartMs
-                val typeStr = if (isFinalTurn) "FINAL" else "PARTIAL"
-
-                com.example.diag.Diag.recordTranscriptReceived(extractedText)
-                com.example.diag.Diag.log(
-                    "GEMINI",
-                    "Transcript ($typeStr, +${elapsedMs}ms): '$extractedText' | Full: '$currentText'"
-                )
-
-                scope.launch(Dispatchers.Default) {
-                    _transcriptDeltas.emit(extractedText)
-                }
-            }
         } catch (e: Exception) {
             com.example.diag.Diag.logException("GEMINI", "Error parsing incoming Gemini Live frame", e)
+        }
+    }
+
+    private fun updateCombinedTranscript(newChunk: String, isFinal: Boolean) {
+        val full = if (currentInterimText.isNotBlank()) {
+            if (finalizedTranscript.isBlank()) currentInterimText
+            else "${finalizedTranscript.toString().trim()} $currentInterimText"
+        } else {
+            finalizedTranscript.toString().trim()
+        }
+
+        val display = full.trim()
+        _liveTranscript.value = display
+        _rawModelResponse.value = display
+
+        val elapsedMs = System.currentTimeMillis() - com.example.diag.Diag.sessionStartMs
+        val typeStr = if (isFinal) "FINAL" else "INTERIM"
+
+        com.example.diag.Diag.recordTranscriptReceived(newChunk)
+        com.example.diag.Diag.log(
+            "GEMINI",
+            "Transcript ($typeStr, +${elapsedMs}ms): '$newChunk' | Full: '$display'"
+        )
+        com.example.diag.Diag.log(
+            "GEMINI_RAW_RESPONSE",
+            "Raw Gemini model output ($typeStr): '$display'"
+        )
+
+        scope.launch(Dispatchers.Default) {
+            _transcriptDeltas.emit(newChunk)
         }
     }
 

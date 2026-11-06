@@ -55,7 +55,7 @@ class ExampleUnitTest {
 
         val plantenMatch = PhoneticFuzzyMatcher.findBestMatch("planten", menu)
         assertNotNull(plantenMatch)
-        assertEquals("Plantain (1 piece)", plantenMatch?.first?.name)
+        assertEquals("Plantain", plantenMatch?.first?.name)
     }
 
     @Test

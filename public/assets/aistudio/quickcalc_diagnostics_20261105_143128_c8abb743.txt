@@ -1,0 +1,248 @@
+=== ENVIRONMENT ===
+App version: 1.0 (1)
+Android version: 17 (API 37)
+Device: Google Pixel 7
+API key: CONFIGURED
+Active speech engine: GEMINI_LIVE (models/gemini-3.5-transcribe-live)
+Internet available: yes
+Mic permission: granted
+
+=== CHECKLIST ===
+- API key: CONFIGURED (last 14:31:26)
+- Internet: reachable (last 14:31:28)
+- Mic permission: granted (last 14:31:28)
+- Mic recording started: yes (last 14:31:00)
+- Audio transmitted: no
+- Gemini connected: yes (last 14:31:01)
+- Setup accepted: no (timed out after 5 s)
+- Transcript received: no
+- Final transcript received: none
+- Active speech engine: GEMINI_LIVE (models/gemini-3.5-transcribe-live)
+- Manual and voice states separate: verified
+
+=== AUDIO ACCOUNTING ===
+- Audio chunks captured: 1110 (2264932 bytes)
+- Audio chunks transmitted: 0 (0 bytes)
+- Audio chunks noise-gated (silence): 4 (8192 bytes)
+
+=== PERFORMANCE & LATENCY ===
+- Connection + First Transcript Latency: N/A
+- Audio-to-Transcript Latency: N/A
+- Transcripts received: 0 (final: 0)
+- Errors logged: 0
+- Messages received by type: none
+
+=== TIMELINE ===
+2026-11-05 14:24:31.995 [LIFECYCLE] Diag initialized. Storage path: /data/user/0/com.aistudio.voicepos.kntrz/files/diagnostics_log.txt
+2026-11-05 14:24:31.997 [SPEECH_ENGINE] Active speech engine: GEMINI_LIVE (models/gemini-3.5-transcribe-live)
+2026-11-05 14:24:31.997 [LIFECYCLE] QuickCalcApp onCreate initialized
+2026-11-05 14:24:32.389 [GEMINI] API key status: CONFIGURED
+2026-11-05 14:24:32.390 [SPEECH_ENGINE] Active speech engine: GEMINI_LIVE (models/gemini-3.5-transcribe-live)
+2026-11-05 14:24:32.842 [PERMISSION] Microphone permission status at startup: GRANTED
+2026-11-05 14:24:34.404 [SPEECH_ENGINE] Active speech engine: GEMINI_LIVE (models/gemini-3.5-transcribe-live)
+2026-11-05 14:24:34.585 [PERMISSION] Microphone permission status at startup: GRANTED
+2026-11-05 14:24:40.111 [LIFECYCLE] Opening Voice Transcribe Test Playground
+2026-11-05 14:24:41.151 [GEMINI] Starting Gemini Live session: model=models/gemini-3.5-transcribe-live, key=CONFIGURED
+2026-11-05 14:24:41.151 [NETWORK] Outgoing connection: host=generativelanguage.googleapis.com, path=/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
+2026-11-05 14:24:41.163 [AUDIO] startCapture request: sampleRate=16000, channels=1 (CHANNEL_IN_MONO), minBufferSize=2048, format=PCM_16BIT
+2026-11-05 14:24:41.331 [AUDIO] AudioRecord capture loop active (mic recording started at 14:24:41)
+2026-11-05 14:24:41.332 [AUDIO] AudioRecord recording started successfully (state=1, recordingState=3)
+2026-11-05 14:24:41.853 [GEMINI] Gemini Live WebSocket connected at 14:24:41
+2026-11-05 14:24:41.853 [GEMINI] Gemini Live WebSocket opened successfully (code=101). Sending setup payload for models/gemini-3.5-transcribe-live.
+2026-11-05 14:24:41.855 [GEMINI] Final setup message payload (Smart Mode=SMART, Vocabulary terms=31): {"setup":{"model":"models\/gemini-3.5-transcribe-live","generationConfig":{"responseModalities":["TEXT"]},"inputAudioTranscription":{"audioTranscriptionConfig":{"mode":"SMART","languageCodes":["en-US"],"customVocabulary":["Banku","Eba","Konkonte","Kelewele","Rice ball","Okro","Meat","Goat","Turkey","Chicken","Chicken in stew","Salmon","Amani","Tuna","Rice","Gizzard","Beef sauce","Dry Salad","Mix Salad","Spaghetti","Beans","Yam","Pack (takeaway)","Fried Fish","Plantain","Sausage","Tilapia","Jollof Rice","Waakye","princeniithompson@gmail.com","30first"]}},"realtimeInputConfig":{"automaticActivityDetection":{"disabled":false}}}}
+2026-11-05 14:24:42.055 [GEMINI] Gemini Live WebSocket closing (code=1007, reason='Invalid JSON payload received. Unknown name "audioTranscriptionConfig" at 'setup.input_audio_transcription': Cannot find fi')
+2026-11-05 14:24:42.372 [AUDIO] Mic audio active: volume=0.40 (RMS: -36.3 dB), totalChunks=15, totalBytes=30720
+2026-11-05 14:24:43.384 [AUDIO] Mic audio active: volume=0.42 (RMS: -35.1 dB), totalChunks=31, totalBytes=63488
+2026-11-05 14:24:44.420 [AUDIO] Mic audio active: volume=0.40 (RMS: -36.1 dB), totalChunks=47, totalBytes=96256
+2026-11-05 14:24:45.423 [AUDIO] Mic audio active: volume=0.43 (RMS: -34.2 dB), totalChunks=63, totalBytes=129024
+2026-11-05 14:24:46.450 [AUDIO] Mic audio active: volume=0.43 (RMS: -34.3 dB), totalChunks=79, totalBytes=161792
+2026-11-05 14:24:46.862 [GEMINI] Gemini setup timed out after 5 seconds
+2026-11-05 14:24:47.490 [AUDIO] Mic audio active: volume=0.44 (RMS: -33.3 dB), totalChunks=95, totalBytes=194560
+2026-11-05 14:24:48.504 [AUDIO] Mic audio active: volume=0.47 (RMS: -31.7 dB), totalChunks=111, totalBytes=227328
+2026-11-05 14:24:49.522 [AUDIO] Mic audio active: volume=0.38 (RMS: -36.9 dB), totalChunks=127, totalBytes=260096
+2026-11-05 14:24:50.547 [AUDIO] Mic audio active: volume=0.44 (RMS: -33.8 dB), totalChunks=143, totalBytes=292864
+2026-11-05 14:24:51.563 [AUDIO] Mic audio active: volume=0.46 (RMS: -32.3 dB), totalChunks=159, totalBytes=325632
+2026-11-05 14:24:52.608 [AUDIO] Mic audio active: volume=0.43 (RMS: -34.4 dB), totalChunks=175, totalBytes=358400
+2026-11-05 14:24:53.629 [AUDIO] Mic audio active: volume=0.47 (RMS: -32.0 dB), totalChunks=191, totalBytes=391168
+2026-11-05 14:24:54.646 [AUDIO] Mic audio active: volume=0.40 (RMS: -36.0 dB), totalChunks=207, totalBytes=423936
+2026-11-05 14:24:55.665 [AUDIO] Mic audio active: volume=0.36 (RMS: -38.3 dB), totalChunks=223, totalBytes=456704
+2026-11-05 14:24:56.683 [AUDIO] Mic audio active: volume=0.37 (RMS: -37.9 dB), totalChunks=239, totalBytes=489472
+2026-11-05 14:24:56.910 [GEMINI] Sent activityEnd signal to Gemini Live
+2026-11-05 14:24:56.910 [AUDIO] stopCapture invoked
+2026-11-05 14:24:56.974 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:25:01.564 [GEMINI] Starting Gemini Live session: model=models/gemini-3.5-transcribe-live, key=CONFIGURED
+2026-11-05 14:25:01.564 [NETWORK] Outgoing connection: host=generativelanguage.googleapis.com, path=/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
+2026-11-05 14:25:01.567 [AUDIO] startCapture request: sampleRate=16000, channels=1 (CHANNEL_IN_MONO), minBufferSize=2048, format=PCM_16BIT
+2026-11-05 14:25:01.587 [AUDIO] AudioRecord capture loop active (mic recording started at 14:25:01)
+2026-11-05 14:25:01.587 [AUDIO] AudioRecord recording started successfully (state=1, recordingState=3)
+2026-11-05 14:25:02.305 [GEMINI] Gemini Live WebSocket connected at 14:25:02
+2026-11-05 14:25:02.307 [GEMINI] Gemini Live WebSocket opened successfully (code=101). Sending setup payload for models/gemini-3.5-transcribe-live.
+2026-11-05 14:25:02.309 [GEMINI] Final setup message payload (Smart Mode=SMART, Vocabulary terms=31): {"setup":{"model":"models\/gemini-3.5-transcribe-live","generationConfig":{"responseModalities":["TEXT"]},"inputAudioTranscription":{"audioTranscriptionConfig":{"mode":"SMART","languageCodes":["en-US"],"customVocabulary":["Banku","Eba","Konkonte","Kelewele","Rice ball","Okro","Meat","Goat","Turkey","Chicken","Chicken in stew","Salmon","Amani","Tuna","Rice","Gizzard","Beef sauce","Dry Salad","Mix Salad","Spaghetti","Beans","Yam","Pack (takeaway)","Fried Fish","Plantain","Sausage","Tilapia","Jollof Rice","Waakye","princeniithompson@gmail.com","30first"]}},"realtimeInputConfig":{"automaticActivityDetection":{"disabled":false}}}}
+2026-11-05 14:25:02.486 [GEMINI] Gemini Live WebSocket closing (code=1007, reason='Invalid JSON payload received. Unknown name "audioTranscriptionConfig" at 'setup.input_audio_transcription': Cannot find fi')
+2026-11-05 14:25:02.615 [AUDIO] Mic audio active: volume=0.38 (RMS: -37.4 dB), totalChunks=15, totalBytes=30720
+2026-11-05 14:25:03.642 [AUDIO] Mic audio active: volume=0.64 (RMS: -21.6 dB), totalChunks=31, totalBytes=63488
+2026-11-05 14:25:04.660 [AUDIO] Mic audio active: volume=0.48 (RMS: -31.5 dB), totalChunks=47, totalBytes=96256
+2026-11-05 14:25:05.675 [AUDIO] Mic audio active: volume=0.53 (RMS: -28.2 dB), totalChunks=63, totalBytes=129024
+2026-11-05 14:25:06.697 [AUDIO] Mic audio active: volume=0.50 (RMS: -29.8 dB), totalChunks=79, totalBytes=161792
+2026-11-05 14:25:07.314 [GEMINI] Gemini setup timed out after 5 seconds
+2026-11-05 14:25:07.736 [AUDIO] Mic audio active: volume=0.58 (RMS: -25.0 dB), totalChunks=95, totalBytes=194560
+2026-11-05 14:25:08.764 [AUDIO] Mic audio active: volume=0.36 (RMS: -38.6 dB), totalChunks=111, totalBytes=227328
+2026-11-05 14:25:09.433 [GEMINI] Sent activityEnd signal to Gemini Live
+2026-11-05 14:25:09.433 [AUDIO] stopCapture invoked
+2026-11-05 14:25:09.482 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:25:10.980 [AUDIO] stopCapture invoked
+2026-11-05 14:25:10.981 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:25:10.981 [LIFECYCLE] Closing Voice Transcribe Test Playground
+2026-11-05 14:25:10.999 [AUDIO] stopCapture invoked
+2026-11-05 14:25:10.999 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:25:12.451 [VOICE_STATE] Mic state -> LISTENING, reason: user tapped mic
+2026-11-05 14:25:12.452 [GEMINI] Starting Gemini Live session: model=models/gemini-3.5-transcribe-live, key=CONFIGURED
+2026-11-05 14:25:12.452 [NETWORK] Outgoing connection: host=generativelanguage.googleapis.com, path=/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
+2026-11-05 14:25:12.455 [AUDIO] startCapture request: sampleRate=16000, channels=1 (CHANNEL_IN_MONO), minBufferSize=2048, format=PCM_16BIT
+2026-11-05 14:25:12.466 [AUDIO] AudioRecord capture loop active (mic recording started at 14:25:12)
+2026-11-05 14:25:12.466 [AUDIO] AudioRecord recording started successfully (state=1, recordingState=3)
+2026-11-05 14:25:13.108 [GEMINI] Gemini Live WebSocket connected at 14:25:13
+2026-11-05 14:25:13.108 [GEMINI] Gemini Live WebSocket opened successfully (code=101). Sending setup payload for models/gemini-3.5-transcribe-live.
+2026-11-05 14:25:13.109 [GEMINI] Final setup message payload (Smart Mode=SMART, Vocabulary terms=29): {"setup":{"model":"models\/gemini-3.5-transcribe-live","generationConfig":{"responseModalities":["TEXT"]},"inputAudioTranscription":{"audioTranscriptionConfig":{"mode":"SMART","languageCodes":["en-US"],"customVocabulary":["Banku","Eba","Konkonte","Kelewele","Rice ball","Okro","Meat","Goat","Turkey","Chicken","Chicken in stew","Salmon","Amani","Tuna","Rice","Gizzard","Beef sauce","Dry Salad","Mix Salad","Spaghetti","Beans","Yam","Pack (takeaway)","Fried Fish","Plantain","Sausage","princeniithompson@gmail.com","30first","Waakye"]}},"realtimeInputConfig":{"automaticActivityDetection":{"disabled":false}}}}
+2026-11-05 14:25:13.304 [GEMINI] Gemini Live WebSocket closing (code=1007, reason='Invalid JSON payload received. Unknown name "audioTranscriptionConfig" at 'setup.input_audio_transcription': Cannot find fi')
+2026-11-05 14:25:13.488 [AUDIO] Mic audio active: volume=0.40 (RMS: -36.2 dB), totalChunks=15, totalBytes=30720
+2026-11-05 14:25:14.508 [AUDIO] Mic audio active: volume=0.39 (RMS: -36.3 dB), totalChunks=31, totalBytes=63488
+2026-11-05 14:25:15.529 [AUDIO] Mic audio active: volume=0.49 (RMS: -30.8 dB), totalChunks=47, totalBytes=96256
+2026-11-05 14:25:16.550 [AUDIO] Mic audio active: volume=0.50 (RMS: -30.3 dB), totalChunks=63, totalBytes=129024
+2026-11-05 14:25:17.569 [AUDIO] Mic audio active: volume=0.40 (RMS: -35.7 dB), totalChunks=79, totalBytes=161792
+2026-11-05 14:25:18.113 [GEMINI] Gemini setup timed out after 5 seconds
+2026-11-05 14:25:18.609 [AUDIO] Mic audio active: volume=0.37 (RMS: -37.7 dB), totalChunks=95, totalBytes=194560
+2026-11-05 14:25:19.628 [AUDIO] Mic audio active: volume=0.37 (RMS: -37.9 dB), totalChunks=111, totalBytes=227328
+2026-11-05 14:25:20.648 [AUDIO] Mic audio active: volume=0.38 (RMS: -37.4 dB), totalChunks=127, totalBytes=260096
+2026-11-05 14:25:21.668 [AUDIO] Mic audio active: volume=0.37 (RMS: -38.0 dB), totalChunks=143, totalBytes=292864
+2026-11-05 14:25:22.689 [AUDIO] Mic audio active: volume=0.37 (RMS: -37.5 dB), totalChunks=159, totalBytes=325632
+2026-11-05 14:25:23.486 [VOICE_STATE] Mic state -> IDLE, reason: user tapped finish mic
+2026-11-05 14:25:23.487 [GEMINI] Sent activityEnd signal to Gemini Live
+2026-11-05 14:25:23.487 [AUDIO] stopCapture invoked
+2026-11-05 14:25:23.533 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:30:08.207 [VOICE_STATE] Mic state -> LISTENING, reason: user tapped mic
+2026-11-05 14:30:08.208 [GEMINI] Starting Gemini Live session: model=models/gemini-3.5-transcribe-live, key=CONFIGURED
+2026-11-05 14:30:08.209 [NETWORK] Outgoing connection: host=generativelanguage.googleapis.com, path=/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
+2026-11-05 14:30:08.211 [AUDIO] startCapture request: sampleRate=16000, channels=1 (CHANNEL_IN_MONO), minBufferSize=2048, format=PCM_16BIT
+2026-11-05 14:30:08.227 [AUDIO] AudioRecord capture loop active (mic recording started at 14:30:08)
+2026-11-05 14:30:08.228 [AUDIO] AudioRecord recording started successfully (state=1, recordingState=3)
+2026-11-05 14:30:09.010 [GEMINI] Gemini Live WebSocket connected at 14:30:09
+2026-11-05 14:30:09.010 [GEMINI] Gemini Live WebSocket opened successfully (code=101). Sending setup payload for models/gemini-3.5-transcribe-live.
+2026-11-05 14:30:09.011 [GEMINI] Final setup message payload (Smart Mode=SMART, Vocabulary terms=29): {"setup":{"model":"models\/gemini-3.5-transcribe-live","generationConfig":{"responseModalities":["TEXT"]},"inputAudioTranscription":{"audioTranscriptionConfig":{"mode":"SMART","languageCodes":["en-US"],"customVocabulary":["Banku","Eba","Konkonte","Kelewele","Rice ball","Okro","Meat","Goat","Turkey","Chicken","Chicken in stew","Salmon","Amani","Tuna","Rice","Gizzard","Beef sauce","Dry Salad","Mix Salad","Spaghetti","Beans","Yam","Pack (takeaway)","Fried Fish","Plantain","Sausage","princeniithompson@gmail.com","30first","Waakye"]}},"realtimeInputConfig":{"automaticActivityDetection":{"disabled":false}}}}
+2026-11-05 14:30:09.184 [GEMINI] Gemini Live WebSocket closing (code=1007, reason='Invalid JSON payload received. Unknown name "audioTranscriptionConfig" at 'setup.input_audio_transcription': Cannot find fi')
+2026-11-05 14:30:09.258 [AUDIO] Mic audio active: volume=0.39 (RMS: -36.8 dB), totalChunks=15, totalBytes=30720
+2026-11-05 14:30:10.278 [AUDIO] Mic audio active: volume=0.55 (RMS: -26.7 dB), totalChunks=31, totalBytes=63488
+2026-11-05 14:30:11.299 [AUDIO] Mic audio active: volume=0.53 (RMS: -28.0 dB), totalChunks=47, totalBytes=96256
+2026-11-05 14:30:12.317 [AUDIO] Mic audio active: volume=0.54 (RMS: -27.8 dB), totalChunks=63, totalBytes=129024
+2026-11-05 14:30:13.340 [AUDIO] Mic audio active: volume=0.39 (RMS: -36.4 dB), totalChunks=79, totalBytes=161792
+2026-11-05 14:30:14.028 [GEMINI] Gemini setup timed out after 5 seconds
+2026-11-05 14:30:14.377 [AUDIO] Mic audio active: volume=0.40 (RMS: -36.2 dB), totalChunks=95, totalBytes=194560
+2026-11-05 14:30:15.242 [VOICE_STATE] Mic state -> IDLE, reason: user tapped finish mic
+2026-11-05 14:30:15.243 [GEMINI] Sent activityEnd signal to Gemini Live
+2026-11-05 14:30:15.243 [AUDIO] stopCapture invoked
+2026-11-05 14:30:15.302 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:30:20.297 [LIFECYCLE] Opening Voice Transcribe Test Playground
+2026-11-05 14:30:21.404 [GEMINI] Starting Gemini Live session: model=models/gemini-3.5-transcribe-live, key=CONFIGURED
+2026-11-05 14:30:21.404 [NETWORK] Outgoing connection: host=generativelanguage.googleapis.com, path=/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
+2026-11-05 14:30:21.408 [AUDIO] startCapture request: sampleRate=16000, channels=1 (CHANNEL_IN_MONO), minBufferSize=2048, format=PCM_16BIT
+2026-11-05 14:30:21.428 [AUDIO] AudioRecord capture loop active (mic recording started at 14:30:21)
+2026-11-05 14:30:21.428 [AUDIO] AudioRecord recording started successfully (state=1, recordingState=3)
+2026-11-05 14:30:22.062 [GEMINI] Gemini Live WebSocket connected at 14:30:22
+2026-11-05 14:30:22.063 [GEMINI] Gemini Live WebSocket opened successfully (code=101). Sending setup payload for models/gemini-3.5-transcribe-live.
+2026-11-05 14:30:22.064 [GEMINI] Final setup message payload (Smart Mode=SMART, Vocabulary terms=31): {"setup":{"model":"models\/gemini-3.5-transcribe-live","generationConfig":{"responseModalities":["TEXT"]},"inputAudioTranscription":{"audioTranscriptionConfig":{"mode":"SMART","languageCodes":["en-US"],"customVocabulary":["Banku","Eba","Konkonte","Kelewele","Rice ball","Okro","Meat","Goat","Turkey","Chicken","Chicken in stew","Salmon","Amani","Tuna","Rice","Gizzard","Beef sauce","Dry Salad","Mix Salad","Spaghetti","Beans","Yam","Pack (takeaway)","Fried Fish","Plantain","Sausage","Tilapia","Jollof Rice","Waakye","princeniithompson@gmail.com","30first"]}},"realtimeInputConfig":{"automaticActivityDetection":{"disabled":false}}}}
+2026-11-05 14:30:22.226 [GEMINI] Gemini Live WebSocket closing (code=1007, reason='Invalid JSON payload received. Unknown name "audioTranscriptionConfig" at 'setup.input_audio_transcription': Cannot find fi')
+2026-11-05 14:30:22.462 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.5 dB), totalChunks=15, totalBytes=30720
+2026-11-05 14:30:23.481 [AUDIO] Mic audio active: volume=0.43 (RMS: -34.5 dB), totalChunks=31, totalBytes=63488
+2026-11-05 14:30:24.514 [AUDIO] Mic audio active: volume=0.49 (RMS: -30.8 dB), totalChunks=47, totalBytes=96256
+2026-11-05 14:30:25.520 [AUDIO] Mic audio active: volume=0.45 (RMS: -33.0 dB), totalChunks=63, totalBytes=129024
+2026-11-05 14:30:26.538 [AUDIO] Mic audio active: volume=0.51 (RMS: -29.2 dB), totalChunks=79, totalBytes=161792
+2026-11-05 14:30:27.074 [GEMINI] Gemini setup timed out after 5 seconds
+2026-11-05 14:30:27.587 [AUDIO] Mic audio active: volume=0.40 (RMS: -36.3 dB), totalChunks=95, totalBytes=194560
+2026-11-05 14:30:28.598 [AUDIO] Mic audio active: volume=0.39 (RMS: -36.9 dB), totalChunks=111, totalBytes=227328
+2026-11-05 14:30:28.661 [GEMINI] Sent activityEnd signal to Gemini Live
+2026-11-05 14:30:28.662 [AUDIO] stopCapture invoked
+2026-11-05 14:30:28.734 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:30:31.229 [LIFECYCLE] Closing Voice Transcribe Test Playground
+2026-11-05 14:30:31.251 [AUDIO] stopCapture invoked
+2026-11-05 14:30:31.251 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:30:32.180 [CALC] Manual calc (Voice hybrid): key='6', exprBefore='', exprAfter='6', result='6', target=MANUAL_STATE
+2026-11-05 14:30:33.319 [CALC] Manual calc (Voice hybrid): key='6', exprBefore='6', exprAfter='66', result='66', target=MANUAL_STATE
+2026-11-05 14:30:34.791 [CALC] Manual calc (Voice hybrid): key='AC', exprBefore='66', exprAfter='', result='0', target=MANUAL_STATE
+2026-11-05 14:30:36.303 [CALC] Manual calc (Voice hybrid): key='1', exprBefore='', exprAfter='1', result='1', target=MANUAL_STATE
+2026-11-05 14:30:36.959 [CALC] Manual calc (Voice hybrid): key='+', exprBefore='1', exprAfter='1 + ', result='1', target=MANUAL_STATE
+2026-11-05 14:30:37.472 [CALC] Manual calc (Voice hybrid): key='1', exprBefore='1 + ', exprAfter='1 + 1', result='2', target=MANUAL_STATE
+2026-11-05 14:30:39.161 [CALC] Manual calc (Voice hybrid): key='+', exprBefore='1 + 1', exprAfter='1 + 1 + ', result='2', target=MANUAL_STATE
+2026-11-05 14:30:40.115 [CALC] Manual calc (Voice hybrid): key='8', exprBefore='1 + 1 + ', exprAfter='1 + 1 + 8', result='10', target=MANUAL_STATE
+2026-11-05 14:30:40.568 [CALC] Manual calc (Voice hybrid): key='+', exprBefore='1 + 1 + 8', exprAfter='1 + 1 + 8 + ', result='10', target=MANUAL_STATE
+2026-11-05 14:30:41.267 [CALC] Manual calc (Voice hybrid): key='2', exprBefore='1 + 1 + 8 + ', exprAfter='1 + 1 + 8 + 2', result='12', target=MANUAL_STATE
+2026-11-05 14:30:42.425 [CALC] Manual calc (Voice hybrid): key='+', exprBefore='1 + 1 + 8 + 2', exprAfter='1 + 1 + 8 + 2 + ', result='12', target=MANUAL_STATE
+2026-11-05 14:30:42.840 [CALC] Manual calc (Voice hybrid): key='5', exprBefore='1 + 1 + 8 + 2 + ', exprAfter='1 + 1 + 8 + 2 + 5', result='17', target=MANUAL_STATE
+2026-11-05 14:30:43.227 [CALC] Manual calc (Voice hybrid): key='+', exprBefore='1 + 1 + 8 + 2 + 5', exprAfter='1 + 1 + 8 + 2 + 5 + ', result='17', target=MANUAL_STATE
+2026-11-05 14:30:43.562 [CALC] Manual calc (Voice hybrid): key='6', exprBefore='1 + 1 + 8 + 2 + 5 + ', exprAfter='1 + 1 + 8 + 2 + 5 + 6', result='23', target=MANUAL_STATE
+2026-11-05 14:30:47.233 [VOICE_STATE] Mic state -> LISTENING, reason: user tapped mic
+2026-11-05 14:30:47.235 [GEMINI] Starting Gemini Live session: model=models/gemini-3.5-transcribe-live, key=CONFIGURED
+2026-11-05 14:30:47.235 [NETWORK] Outgoing connection: host=generativelanguage.googleapis.com, path=/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
+2026-11-05 14:30:47.237 [AUDIO] startCapture request: sampleRate=16000, channels=1 (CHANNEL_IN_MONO), minBufferSize=2048, format=PCM_16BIT
+2026-11-05 14:30:47.256 [AUDIO] AudioRecord capture loop active (mic recording started at 14:30:47)
+2026-11-05 14:30:47.256 [AUDIO] AudioRecord recording started successfully (state=1, recordingState=3)
+2026-11-05 14:30:48.074 [GEMINI] Gemini Live WebSocket connected at 14:30:48
+2026-11-05 14:30:48.074 [GEMINI] Gemini Live WebSocket opened successfully (code=101). Sending setup payload for models/gemini-3.5-transcribe-live.
+2026-11-05 14:30:48.074 [GEMINI] Final setup message payload (Smart Mode=SMART, Vocabulary terms=29): {"setup":{"model":"models\/gemini-3.5-transcribe-live","generationConfig":{"responseModalities":["TEXT"]},"inputAudioTranscription":{"audioTranscriptionConfig":{"mode":"SMART","languageCodes":["en-US"],"customVocabulary":["Banku","Eba","Konkonte","Kelewele","Rice ball","Okro","Meat","Goat","Turkey","Chicken","Chicken in stew","Salmon","Amani","Tuna","Rice","Gizzard","Beef sauce","Dry Salad","Mix Salad","Spaghetti","Beans","Yam","Pack (takeaway)","Fried Fish","Plantain","Sausage","princeniithompson@gmail.com","30first","Waakye"]}},"realtimeInputConfig":{"automaticActivityDetection":{"disabled":false}}}}
+2026-11-05 14:30:48.268 [GEMINI] Gemini Live WebSocket closing (code=1007, reason='Invalid JSON payload received. Unknown name "audioTranscriptionConfig" at 'setup.input_audio_transcription': Cannot find fi')
+2026-11-05 14:30:48.285 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.4 dB), totalChunks=15, totalBytes=30720
+2026-11-05 14:30:49.305 [AUDIO] Mic audio active: volume=0.48 (RMS: -31.1 dB), totalChunks=31, totalBytes=63488
+2026-11-05 14:30:50.326 [AUDIO] Mic audio active: volume=0.50 (RMS: -30.1 dB), totalChunks=47, totalBytes=96256
+2026-11-05 14:30:51.345 [AUDIO] Mic audio active: volume=0.42 (RMS: -35.0 dB), totalChunks=63, totalBytes=129024
+2026-11-05 14:30:52.365 [AUDIO] Mic audio active: volume=0.44 (RMS: -33.7 dB), totalChunks=79, totalBytes=161792
+2026-11-05 14:30:53.079 [GEMINI] Gemini setup timed out after 5 seconds
+2026-11-05 14:30:53.404 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.4 dB), totalChunks=95, totalBytes=194560
+2026-11-05 14:30:54.425 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.3 dB), totalChunks=111, totalBytes=227328
+2026-11-05 14:30:54.599 [VOICE_STATE] Voice card cleared and session restarted, reason: user tapped AC pill
+2026-11-05 14:30:54.600 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:30:54.601 [GEMINI] Starting Gemini Live session: model=models/gemini-3.5-transcribe-live, key=CONFIGURED
+2026-11-05 14:30:54.601 [NETWORK] Outgoing connection: host=generativelanguage.googleapis.com, path=/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
+2026-11-05 14:30:55.444 [AUDIO] Mic audio active: volume=0.42 (RMS: -35.0 dB), totalChunks=127, totalBytes=260096
+2026-11-05 14:30:55.711 [GEMINI] Gemini Live WebSocket connected at 14:30:55
+2026-11-05 14:30:55.712 [GEMINI] Gemini Live WebSocket opened successfully (code=101). Sending setup payload for models/gemini-3.5-transcribe-live.
+2026-11-05 14:30:55.713 [GEMINI] Final setup message payload (Smart Mode=SMART, Vocabulary terms=29): {"setup":{"model":"models\/gemini-3.5-transcribe-live","generationConfig":{"responseModalities":["TEXT"]},"inputAudioTranscription":{"audioTranscriptionConfig":{"mode":"SMART","languageCodes":["en-US"],"customVocabulary":["Banku","Eba","Konkonte","Kelewele","Rice ball","Okro","Meat","Goat","Turkey","Chicken","Chicken in stew","Salmon","Amani","Tuna","Rice","Gizzard","Beef sauce","Dry Salad","Mix Salad","Spaghetti","Beans","Yam","Pack (takeaway)","Fried Fish","Plantain","Sausage","princeniithompson@gmail.com","30first","Waakye"]}},"realtimeInputConfig":{"automaticActivityDetection":{"disabled":false}}}}
+2026-11-05 14:30:56.037 [GEMINI] Gemini Live WebSocket closing (code=1007, reason='Invalid JSON payload received. Unknown name "audioTranscriptionConfig" at 'setup.input_audio_transcription': Cannot find fi')
+2026-11-05 14:30:56.465 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.5 dB), totalChunks=143, totalBytes=292864
+2026-11-05 14:30:56.652 [VOICE_STATE] Mic state -> PAUSED, reason: user tapped pause
+2026-11-05 14:30:56.653 [GEMINI] Sent activityEnd signal to Gemini Live
+2026-11-05 14:30:57.488 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.3 dB), totalChunks=159, totalBytes=325632
+2026-11-05 14:30:57.802 [VOICE_STATE] Mic state -> LISTENING, reason: user tapped resume
+2026-11-05 14:30:57.803 [GEMINI] Sent activityStart signal to Gemini Live
+2026-11-05 14:30:58.526 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.3 dB), totalChunks=175, totalBytes=358400
+2026-11-05 14:30:59.196 [VOICE_STATE] Mic state -> IDLE, reason: user tapped finish mic
+2026-11-05 14:30:59.197 [GEMINI] Sent activityEnd signal to Gemini Live
+2026-11-05 14:30:59.197 [AUDIO] stopCapture invoked
+2026-11-05 14:30:59.252 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:31:00.667 [VOICE_STATE] Mic state -> LISTENING, reason: user tapped mic
+2026-11-05 14:31:00.668 [GEMINI] Starting Gemini Live session: model=models/gemini-3.5-transcribe-live, key=CONFIGURED
+2026-11-05 14:31:00.668 [NETWORK] Outgoing connection: host=generativelanguage.googleapis.com, path=/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent
+2026-11-05 14:31:00.671 [AUDIO] startCapture request: sampleRate=16000, channels=1 (CHANNEL_IN_MONO), minBufferSize=2048, format=PCM_16BIT
+2026-11-05 14:31:00.694 [AUDIO] AudioRecord capture loop active (mic recording started at 14:31:00)
+2026-11-05 14:31:00.694 [AUDIO] AudioRecord recording started successfully (state=1, recordingState=3)
+2026-11-05 14:31:01.494 [GEMINI] Gemini Live WebSocket connected at 14:31:01
+2026-11-05 14:31:01.496 [GEMINI] Gemini Live WebSocket opened successfully (code=101). Sending setup payload for models/gemini-3.5-transcribe-live.
+2026-11-05 14:31:01.498 [GEMINI] Final setup message payload (Smart Mode=SMART, Vocabulary terms=29): {"setup":{"model":"models\/gemini-3.5-transcribe-live","generationConfig":{"responseModalities":["TEXT"]},"inputAudioTranscription":{"audioTranscriptionConfig":{"mode":"SMART","languageCodes":["en-US"],"customVocabulary":["Banku","Eba","Konkonte","Kelewele","Rice ball","Okro","Meat","Goat","Turkey","Chicken","Chicken in stew","Salmon","Amani","Tuna","Rice","Gizzard","Beef sauce","Dry Salad","Mix Salad","Spaghetti","Beans","Yam","Pack (takeaway)","Fried Fish","Plantain","Sausage","princeniithompson@gmail.com","30first","Waakye"]}},"realtimeInputConfig":{"automaticActivityDetection":{"disabled":false}}}}
+2026-11-05 14:31:01.712 [GEMINI] Gemini Live WebSocket closing (code=1007, reason='Invalid JSON payload received. Unknown name "audioTranscriptionConfig" at 'setup.input_audio_transcription': Cannot find fi')
+2026-11-05 14:31:01.719 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.4 dB), totalChunks=15, totalBytes=30720
+2026-11-05 14:31:02.737 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.3 dB), totalChunks=31, totalBytes=63488
+2026-11-05 14:31:03.759 [AUDIO] Mic audio active: volume=0.48 (RMS: -30.9 dB), totalChunks=47, totalBytes=96256
+2026-11-05 14:31:04.778 [AUDIO] Mic audio active: volume=0.46 (RMS: -32.6 dB), totalChunks=63, totalBytes=129024
+2026-11-05 14:31:05.799 [AUDIO] Mic audio active: volume=0.44 (RMS: -33.3 dB), totalChunks=79, totalBytes=161792
+2026-11-05 14:31:06.509 [GEMINI] Gemini setup timed out after 5 seconds
+2026-11-05 14:31:06.839 [AUDIO] Mic audio active: volume=0.46 (RMS: -32.2 dB), totalChunks=95, totalBytes=194560
+2026-11-05 14:31:07.859 [AUDIO] Mic audio active: volume=0.42 (RMS: -34.8 dB), totalChunks=111, totalBytes=227328
+2026-11-05 14:31:08.878 [AUDIO] Mic audio active: volume=0.41 (RMS: -35.2 dB), totalChunks=127, totalBytes=260096
+2026-11-05 14:31:09.898 [AUDIO] Mic audio active: volume=0.42 (RMS: -34.8 dB), totalChunks=143, totalBytes=292864
+2026-11-05 14:31:10.920 [AUDIO] Mic audio active: volume=0.42 (RMS: -35.0 dB), totalChunks=159, totalBytes=325632
+2026-11-05 14:31:11.243 [VOICE_STATE] Mic state -> IDLE, reason: user tapped finish mic
+2026-11-05 14:31:11.244 [GEMINI] Sent activityEnd signal to Gemini Live
+2026-11-05 14:31:11.244 [AUDIO] stopCapture invoked
+2026-11-05 14:31:11.304 [GEMINI] Closing Gemini Live WebSocket session
+2026-11-05 14:31:25.924 [LIFECYCLE] Opening Diagnostics Screen
+2026-11-05 14:31:26.038 [LIFECYCLE] DiagnosticsScreen opened
+2026-11-05 14:31:28.467 [TOUCH] DiagnosticsScreen: 'Download txt file' clicked
+2026-11-05 14:31:28.468 [DIAG] Log export initiated: preparing diagnostics file

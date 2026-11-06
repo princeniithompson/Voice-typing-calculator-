@@ -149,11 +149,12 @@ fun QuickCalcScreen(
                         onOpenSettings = { viewModel.openSettings() },
                         onOpenDiagnostics = { viewModel.openDiagnostics() },
                         onOpenTestPlayground = { viewModel.openTestPlayground() },
-                        onHoldStart = { viewModel.onHoldStart() },
-                        onHoldRelease = { swiped -> viewModel.onHoldRelease(swiped) },
-                        onLockToggle = { viewModel.onVoiceLockToggle() },
-                        onPauseToggle = { viewModel.onVoicePauseToggle() },
-                        onClearVoice = { viewModel.onClearVoiceCard() },
+                        onMicTap = { viewModel.onMicTap() },
+                        onPauseTap = { viewModel.onPauseTap() },
+                        onACTap = { viewModel.onACTap() },
+                        onVoiceEqualTap = { viewModel.onVoiceEqualTap() },
+                        onSilenceAutoPause = { viewModel.onSilenceAutoPause() },
+                        onAppBackgrounded = { viewModel.onAppBackgrounded() },
                         onAddVoiceTotalToManual = { viewModel.addVoiceTotalToManual() }
                     )
                 }

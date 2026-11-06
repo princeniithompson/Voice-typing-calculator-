@@ -7,9 +7,7 @@ import android.media.MediaRecorder
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -21,7 +19,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.log10
 import kotlin.math.sqrt
 
 /**
@@ -42,7 +39,7 @@ object GeminiLiveTester {
 
     private const val MODEL_NAME = "models/gemini-3.5-transcribe-live"
     private const val ENDPOINT_HOST = "generativelanguage.googleapis.com"
-    private const val WS_PATH = "/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
+    private const val WS_PATH = "/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
 
     suspend fun runTest(
         context: Context,
@@ -55,8 +52,8 @@ object GeminiLiveTester {
         // a. Check API key presence
         val key = rawApiKey.trim()
         Diag.log("GEMINI_TEST", "Step A: Checking API key presence. Key: ${Diag.maskKey(key)}")
-        if (key.isBlank()) {
-            val verdict = "TEST FAILED at step A: API key is missing or blank"
+        if (key.isBlank() || key == "MY_GEMINI_API_KEY" || key.contains("YOUR_KEY") || key.length < 10) {
+            val verdict = "TEST FAILED at step A: API key is invalid or placeholder"
             Diag.log("GEMINI_TEST", verdict)
             onProgressUpdate(verdict)
             return@withContext verdict
@@ -82,8 +79,8 @@ object GeminiLiveTester {
             return@withContext verdict
         }
 
-        // d. Open Gemini Live WebSocket
-        Diag.log("GEMINI_TEST", "Step D: Connecting to wss://$ENDPOINT_HOST$WS_PATH?key=...")
+        // d. Open Gemini Live WebSocket (v1beta endpoint with header auth)
+        Diag.log("GEMINI_TEST", "Step D: Connecting to wss://$ENDPOINT_HOST$WS_PATH with x-goog-api-key header...")
         onProgressUpdate("Step D: Opening WebSocket...")
 
         val client = OkHttpClient.Builder()
@@ -92,7 +89,8 @@ object GeminiLiveTester {
             .build()
 
         val request = Request.Builder()
-            .url("wss://$ENDPOINT_HOST$WS_PATH?key=$key")
+            .url("wss://$ENDPOINT_HOST$WS_PATH")
+            .addHeader("x-goog-api-key", key)
             .build()
 
         val isConnected = AtomicBoolean(false)
@@ -118,20 +116,33 @@ object GeminiLiveTester {
 
                 try {
                     val json = JSONObject(text)
-                    if (json.has("setupComplete")) {
+                    if (json.has("setupComplete") || json.has("setup_complete")) {
                         Diag.log("GEMINI_TEST", "Setup complete acknowledged by Gemini Live")
                         setupAcknowledged.set(true)
                     }
 
                     val serverContent = json.optJSONObject("serverContent")
-                    val modelTurn = serverContent?.optJSONObject("modelTurn")
-                    val parts = modelTurn?.optJSONArray("parts")
-                    if (parts != null && parts.length() > 0) {
-                        for (i in 0 until parts.length()) {
-                            val partText = parts.getJSONObject(i).optString("text", "")
-                            if (partText.isNotBlank()) {
-                                transcriptCount.incrementAndGet()
-                                Diag.log("GEMINI_TEST", "Transcript received from Gemini: '$partText'")
+                    if (serverContent != null) {
+                        val interim = serverContent.optJSONObject("interimInputTranscription")
+                            ?: serverContent.optJSONObject("interim_input_transcription")
+                        val finalTrans = serverContent.optJSONObject("inputTranscription")
+                            ?: serverContent.optJSONObject("input_transcription")
+
+                        val textContent = interim?.optString("text", "") ?: finalTrans?.optString("text", "") ?: ""
+                        if (textContent.isNotBlank()) {
+                            transcriptCount.incrementAndGet()
+                            Diag.log("GEMINI_TEST", "Transcript received from Gemini Live: '$textContent'")
+                        } else {
+                            val modelTurn = serverContent.optJSONObject("modelTurn")
+                            val parts = modelTurn?.optJSONArray("parts")
+                            if (parts != null && parts.length() > 0) {
+                                for (i in 0 until parts.length()) {
+                                    val partText = parts.getJSONObject(i).optString("text", "")
+                                    if (partText.isNotBlank()) {
+                                        transcriptCount.incrementAndGet()
+                                        Diag.log("GEMINI_TEST", "Transcript received from Gemini modelTurn: '$partText'")
+                                    }
+                                }
                             }
                         }
                     }
@@ -172,6 +183,11 @@ object GeminiLiveTester {
                 put("generationConfig", JSONObject().apply {
                     put("responseModalities", JSONArray().apply { put("TEXT") })
                 })
+                put("realtimeInputConfig", JSONObject().apply {
+                    put("automaticActivityDetection", JSONObject().apply {
+                        put("disabled", true)
+                    })
+                })
                 put("systemInstruction", JSONObject().apply {
                     put("parts", JSONArray().apply {
                         put(JSONObject().apply {
@@ -201,11 +217,18 @@ object GeminiLiveTester {
             delay(100)
         }
 
-        if (!setupAcknowledged.get()) {
-            // Note: Some models or versions don't send explicit setupComplete, but let's check if connection is still alive
-            Diag.log("GEMINI_TEST", "Warning: No explicit setupComplete received within 5s, proceeding with audio stream...")
+        if (setupAcknowledged.get()) {
+            Diag.log("GEMINI_TEST", "Step F: Setup confirmed! Sending activityStart...")
+            try {
+                val actStart = JSONObject().apply {
+                    put("realtimeInput", JSONObject().apply {
+                        put("activityStart", JSONObject())
+                    })
+                }
+                activeWs.send(actStart.toString())
+            } catch (_: Exception) {}
         } else {
-            Diag.log("GEMINI_TEST", "Step F: Setup confirmed!")
+            Diag.log("GEMINI_TEST", "Warning: No explicit setupComplete received within 5s, proceeding with audio stream...")
         }
 
         // g. Start mic, stream 8 seconds of audio while printing chunk counts and volume live
@@ -253,11 +276,9 @@ object GeminiLiveTester {
                     val audioBase64 = Base64.encodeToString(buffer, 0, readBytes, Base64.NO_WRAP)
                     val frameJson = JSONObject().apply {
                         put("realtimeInput", JSONObject().apply {
-                            put("mediaChunks", JSONArray().apply {
-                                put(JSONObject().apply {
-                                    put("mimeType", "audio/pcm;rate=16000")
-                                    put("data", audioBase64)
-                                })
+                            put("audio", JSONObject().apply {
+                                put("mimeType", "audio/pcm;rate=16000")
+                                put("data", audioBase64)
                             })
                         })
                     }
@@ -305,6 +326,12 @@ object GeminiLiveTester {
         // i. Close session cleanly
         Diag.log("GEMINI_TEST", "Step I: Closing WebSocket session cleanly...")
         try {
+            val actEnd = JSONObject().apply {
+                put("realtimeInput", JSONObject().apply {
+                    put("activityEnd", JSONObject())
+                })
+            }
+            activeWs.send(actEnd.toString())
             activeWs.close(1000, "Gemini live test completed")
         } catch (_: Exception) {}
 

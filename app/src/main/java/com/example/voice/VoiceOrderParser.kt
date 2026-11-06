@@ -16,7 +16,8 @@ data class VoiceParseResult(
 
 /**
  * Parses transcribed speech from Gemini Live into structured order items and GHS totals.
- * Handles both food orders ("2 Banku + 1 Fried Fish") and spoken math ("100 + 200 + 300").
+ * Handles Ghanaian food orders with custom units/clauses ("2 cups of rice", "three scoops of okro and 2 banku")
+ * as well as spoken math calculations ("100 + 200 + 300").
  */
 class VoiceOrderParser(
     private val menuItemsProvider: () -> List<PriceItem> = { PricingRepository.DEFAULT_PRICES }
@@ -24,8 +25,9 @@ class VoiceOrderParser(
     private val wordToNumber = mapOf(
         "zero" to 0, "a" to 1, "an" to 1, "one" to 1, "two" to 2, "three" to 3, "four" to 4,
         "five" to 5, "six" to 6, "seven" to 7, "eight" to 8, "nine" to 9, "ten" to 10,
-        "eleven" to 11, "twelve" to 12, "fifteen" to 15, "twenty" to 20, "thirty" to 30,
-        "forty" to 40, "fifty" to 50
+        "eleven" to 11, "twelve" to 12, "thirteen" to 13, "fourteen" to 14, "fifteen" to 15,
+        "sixteen" to 16, "seventeen" to 17, "eighteen" to 18, "nineteen" to 19, "twenty" to 20,
+        "thirty" to 30, "forty" to 40, "fifty" to 50
     )
 
     fun parse(transcript: String): VoiceParseResult {
@@ -40,24 +42,24 @@ class VoiceOrderParser(
         }
 
         val availableMenu = menuItemsProvider()
-
-        // 1. Check for spoken math first if speech contains explicit math operators without food items
-        val mathResult = tryParseMath(trimmed)
         val foodResult = tryParseFood(trimmed, availableMenu)
 
-        return when {
-            foodResult != null && foodResult.items.isNotEmpty() -> foodResult
-            mathResult != null -> mathResult
-            else -> {
-                // If neither resolved into items or valid math, display transcript with 0 total
-                VoiceParseResult(
-                    transcript = trimmed,
-                    items = emptyList(),
-                    total = BigDecimal.ZERO,
-                    isMath = false
-                )
-            }
+        if (foodResult != null && foodResult.items.isNotEmpty()) {
+            return foodResult
         }
+
+        // Secondary fallback for spoken math ("100 + 200 + 300")
+        val mathResult = tryParseMath(trimmed)
+        if (mathResult != null) {
+            return mathResult
+        }
+
+        return VoiceParseResult(
+            transcript = trimmed,
+            items = emptyList(),
+            total = BigDecimal.ZERO,
+            isMath = false
+        )
     }
 
     private fun tryParseFood(text: String, menuItems: List<PriceItem>): VoiceParseResult? {
@@ -70,30 +72,45 @@ class VoiceOrderParser(
             .map { it.trim() }
             .filter { it.isNotEmpty() }
 
-        for (clause in clauses) {
-            val words = clause.split("\\s+".toRegex())
-            var qty = 1
-            var startIndex = 0
+        val fillerWords = listOf("cup", "cups", "scoop", "scoops", "piece", "pieces", "bowl", "bowls", "plate", "plates", "portion", "portions", "of", "the", "for", "please")
 
-            if (words.isNotEmpty()) {
-                val firstWord = words[0]
-                val parsedNum = firstWord.toIntOrNull() ?: wordToNumber[firstWord]
-                if (parsedNum != null && parsedNum > 0) {
+        for (clause in clauses) {
+            val words = clause.split("\\s+".toRegex()).filter { it.isNotEmpty() }
+            if (words.isEmpty()) continue
+
+            var qty = 1
+            var qtyFound = false
+            val remainingWords = mutableListOf<String>()
+
+            // Scan the entire clause for a quantity descriptor
+            for (word in words) {
+                val parsedNum = word.toIntOrNull() ?: wordToNumber[word]
+                if (parsedNum != null && !qtyFound) {
                     qty = parsedNum
-                    startIndex = 1
+                    qtyFound = true // Capture first matching number in clause
+                } else {
+                    // Filter out non-descriptive filler terms like "cups", "scoops", "pieces"
+                    if (word !in fillerWords) {
+                        remainingWords.add(word)
+                    }
                 }
             }
 
-            val itemQuery = words.drop(startIndex).joinToString(" ").trim()
+            val itemQuery = remainingWords.joinToString(" ").trim()
             if (itemQuery.isEmpty()) continue
 
-            // Match against available items and aliases
-            val matchedItem = menuItems.firstOrNull { item ->
-                item.name.equals(itemQuery, ignoreCase = true) ||
-                        item.aliases.any { alias -> alias.equals(itemQuery, ignoreCase = true) } ||
-                        itemQuery.contains(item.name.lowercase(Locale.ROOT)) ||
-                        item.aliases.any { alias -> itemQuery.contains(alias.lowercase(Locale.ROOT)) }
-            }
+            // Robust text matching against clean names and aliases (prioritize longer names)
+            val matchedItem = menuItems
+                .sortedByDescending { it.name.length }
+                .firstOrNull { item ->
+                    val cleanName = item.name.lowercase(Locale.ROOT)
+                    cleanName == itemQuery ||
+                    itemQuery.contains(cleanName) ||
+                    item.aliases.any { alias ->
+                        val cleanAlias = alias.lowercase(Locale.ROOT)
+                        cleanAlias == itemQuery || itemQuery.contains(cleanAlias)
+                    }
+                }
 
             if (matchedItem != null) {
                 val unitPrice = BigDecimal.valueOf(matchedItem.price).setScale(2, RoundingMode.HALF_UP)
@@ -110,16 +127,9 @@ class VoiceOrderParser(
         }
 
         if (detected.isEmpty()) return null
-
         val grandTotal = detected.fold(BigDecimal.ZERO) { acc, item -> acc.add(item.lineTotal) }
         val breakdown = detected.joinToString(" + ") { "${it.quantity} ${it.name}" }
-
-        return VoiceParseResult(
-            transcript = breakdown,
-            items = detected,
-            total = grandTotal,
-            isMath = false
-        )
+        return VoiceParseResult(transcript = breakdown, items = detected, total = grandTotal, isMath = false)
     }
 
     private fun convertSpokenNumbers(text: String): String {

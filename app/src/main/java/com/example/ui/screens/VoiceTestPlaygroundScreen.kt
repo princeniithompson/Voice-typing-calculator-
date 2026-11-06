@@ -106,7 +106,6 @@ fun VoiceTestPlaygroundScreen(
     val apiKey by viewModel.geminiApiKey.collectAsState()
     val isSmartMode by viewModel.isSmartTranscriptionEnabled.collectAsState()
     val primaryLanguage by viewModel.testPrimaryLanguage.collectAsState()
-    val systemInstruction by viewModel.testSystemInstruction.collectAsState()
     val customVocabulary by viewModel.testVocabularyList.collectAsState()
 
     var showSettingsDrawer by remember { mutableStateOf(false) }
@@ -167,24 +166,27 @@ fun VoiceTestPlaygroundScreen(
         statusCaption = "Connecting Gemini Live..."
         liveTranscriptList.add("") // New line entry
 
+        val menuNames = viewModel.allMenuItems.value.map { it.name }.ifEmpty {
+            com.example.pricing.PricingRepository.DEFAULT_PRICES.map { it.name }
+        }
+        val unifiedVocabulary = com.example.voice.SharedVocabularyManager.getUnifiedVocabulary(menuNames)
+
         geminiSession.startSession(
             apiKey = apiKey,
-            customVocabulary = customVocabulary,
+            customVocabulary = unifiedVocabulary,
             isSmartMode = isSmartMode,
-            primaryLanguage = primaryLanguage,
-            systemInstructionText = systemInstruction
+            primaryLanguage = primaryLanguage
         )
 
         val captureStarted = audioCapture.startCapture(
             scope = scope,
             onAudioChunk = { pcmChunk, length ->
-                if (noiseGate.isGateOpen.value) {
-                    geminiSession.sendAudioChunk(pcmChunk, length)
+                val chunksToSend = noiseGate.processAudioChunk(pcmChunk, length)
+                for (chunk in chunksToSend) {
+                    geminiSession.sendAudioChunk(chunk, chunk.size)
                 }
             },
-            onRmsDbChanged = { db ->
-                noiseGate.processRmsDb(db)
-            }
+            onRmsDbChanged = { _ -> }
         )
 
         statusCaption = if (captureStarted) {
@@ -197,6 +199,8 @@ fun VoiceTestPlaygroundScreen(
     fun stopListeningSession() {
         if (!isListening) return
         isListening = false
+        noiseGate.reset()
+        geminiSession.sendActivityEnd()
         audioCapture.stopCapture()
         geminiSession.closeSession()
         statusCaption = "Session stopped • Tap mic to speak"
@@ -420,7 +424,6 @@ fun VoiceTestPlaygroundScreen(
                     viewModel = viewModel,
                     isSmartMode = isSmartMode,
                     primaryLanguage = primaryLanguage,
-                    systemInstruction = systemInstruction,
                     customVocabulary = customVocabulary,
                     onClose = { showSettingsDrawer = false }
                 )
@@ -435,7 +438,6 @@ private fun RunSettingsPanel(
     viewModel: PosViewModel,
     isSmartMode: Boolean,
     primaryLanguage: String,
-    systemInstruction: String,
     customVocabulary: List<String>,
     onClose: () -> Unit
 ) {
@@ -511,29 +513,27 @@ private fun RunSettingsPanel(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-            // System Instructions
-            Column {
-                Text(
-                    text = "System instructions",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = systemInstruction,
-                    onValueChange = { viewModel.setTestSystemInstruction(it) },
-                    placeholder = { Text("Optional tone and style instructions for the model", fontSize = 11.sp) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+            // Audio Transcription Config Info
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Native Biasing Configuration",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
-                )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Rules and terms are routed via inputAudioTranscription.audioTranscriptionConfig (mode=\"SMART\"). Custom vocabulary phrases below are injected dynamically.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 15.sp
+                    )
+                }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))

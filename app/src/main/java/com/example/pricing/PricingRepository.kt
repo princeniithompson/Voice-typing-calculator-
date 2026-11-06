@@ -60,18 +60,35 @@ class PricingRepository(private val menuItemDao: MenuItemDao) {
 
     companion object {
         val DEFAULT_PRICES = listOf(
-            PriceItem(id = 1, name = "Banku", price = 5.0, category = "Main Dishes", aliases = listOf("banku", "bangu", "bankoo")),
-            PriceItem(id = 2, name = "Fried Fish", price = 20.0, category = "Proteins", aliases = listOf("fried fish", "fish", "tilapia", "fried tilapia")),
-            PriceItem(id = 3, name = "Okro (1 scoop)", price = 2.0, category = "Soups & Stews", aliases = listOf("okro", "okra", "okro soup")),
-            PriceItem(id = 4, name = "Chicken", price = 15.0, category = "Proteins", aliases = listOf("chicken", "fried chicken", "grilled chicken")),
-            PriceItem(id = 5, name = "Rice (1 cup)", price = 6.0, category = "Main Dishes", aliases = listOf("rice", "cup of rice", "plain rice")),
-            PriceItem(id = 6, name = "Plantain (1 piece)", price = 2.0, category = "Sides", aliases = listOf("plantain", "fried plantain", "dodo")),
-            PriceItem(id = 7, name = "Sausage (1 piece)", price = 4.0, category = "Sides", aliases = listOf("sausage", "fried sausage")),
-            PriceItem(id = 8, name = "Jollof Rice", price = 25.0, category = "Main Dishes", aliases = listOf("jollof", "jollof rice")),
-            PriceItem(id = 9, name = "Red Red", price = 20.0, category = "Main Dishes", aliases = listOf("red red", "beans and plantain")),
-            PriceItem(id = 10, name = "Tilapia", price = 35.0, category = "Proteins", aliases = listOf("tilapia", "grilled tilapia")),
-            PriceItem(id = 11, name = "Waakye", price = 25.0, category = "Main Dishes", aliases = listOf("waakye", "wake")),
-            PriceItem(id = 12, name = "Kelewele", price = 12.0, category = "Sides", aliases = listOf("kelewele", "spicy plantain"))
+            PriceItem(id = 1, name = "Banku", price = 5.0, category = "Main Dishes", aliases = listOf("banku", "bangu", "bankoo", "bankye")),
+            PriceItem(id = 2, name = "Eba", price = 5.0, category = "Main Dishes", aliases = listOf("eba", "garri", "pinon")),
+            PriceItem(id = 3, name = "Konkonte", price = 5.0, category = "Main Dishes", aliases = listOf("konkonte", "kokonte", "face the wall", "abitie")),
+            PriceItem(id = 4, name = "Kelewele", price = 5.0, category = "Sides", aliases = listOf("kelewele", "spicy plantain")),
+            PriceItem(id = 5, name = "Rice ball", price = 5.0, category = "Main Dishes", aliases = listOf("rice ball", "rice balls", "omo tuo", "omotuo")),
+            PriceItem(id = 6, name = "Okro", price = 2.0, category = "Soups & Stews", aliases = listOf("okro", "okra", "okro soup", "okro stew", "okro scoop")),
+            PriceItem(id = 7, name = "Meat", price = 10.0, category = "Proteins", aliases = listOf("meat", "beef", "cow meat")),
+            PriceItem(id = 8, name = "Goat", price = 20.0, category = "Proteins", aliases = listOf("goat", "goat meat", "chevon")),
+            PriceItem(id = 9, name = "Turkey", price = 20.0, category = "Proteins", aliases = listOf("turkey", "turkey wing", "turkey wings")),
+            PriceItem(id = 10, name = "Chicken", price = 15.0, category = "Proteins", aliases = listOf("chicken", "fried chicken", "grilled chicken", "chiken")),
+            PriceItem(id = 11, name = "Chicken in stew", price = 15.0, category = "Proteins", aliases = listOf("chicken in stew", "stew chicken", "chicken stew")),
+            PriceItem(id = 12, name = "Salmon", price = 15.0, category = "Proteins", aliases = listOf("salmon", "smoked salmon", "samon")),
+            PriceItem(id = 13, name = "Amani", price = 10.0, category = "Proteins", aliases = listOf("amani", "anchovy", "anchovies", "amane")),
+            PriceItem(id = 14, name = "Tuna", price = 10.0, category = "Proteins", aliases = listOf("tuna", "tuna fish", "fried tuna")),
+            PriceItem(id = 15, name = "Rice", price = 6.0, category = "Main Dishes", aliases = listOf("rice", "cup of rice", "plain rice", "white rice")),
+            PriceItem(id = 16, name = "Gizzard", price = 5.0, category = "Sides", aliases = listOf("gizzard", "fried gizzard")),
+            PriceItem(id = 17, name = "Beef sauce", price = 5.0, category = "Soups & Stews", aliases = listOf("beef sauce", "beef gravy", "sauce")),
+            PriceItem(id = 18, name = "Dry Salad", price = 5.0, category = "Sides", aliases = listOf("dry salad", "salad")),
+            PriceItem(id = 19, name = "Mix Salad", price = 5.0, category = "Sides", aliases = listOf("mix salad", "mixed salad", "coleslaw")),
+            PriceItem(id = 20, name = "Spaghetti", price = 5.0, category = "Sides", aliases = listOf("spaghetti", "spag", "pasta", "noodles")),
+            PriceItem(id = 21, name = "Beans", price = 5.0, category = "Main Dishes", aliases = listOf("beans", "red red", "gob3", "gobe")),
+            PriceItem(id = 22, name = "Yam", price = 3.0, category = "Sides", aliases = listOf("yam", "fried yam")),
+            PriceItem(id = 23, name = "Pack (takeaway)", price = 3.0, category = "Supplies", aliases = listOf("pack", "takeaway", "take away", "takeaway pack", "pack takeaway")),
+            PriceItem(id = 24, name = "Fried Fish", price = 20.0, category = "Proteins", aliases = listOf("fried fish", "fish", "tilapia", "fried tilapia")),
+            PriceItem(id = 25, name = "Plantain", price = 2.0, category = "Sides", aliases = listOf("plantain", "fried plantain", "dodo")),
+            PriceItem(id = 26, name = "Sausage", price = 4.0, category = "Sides", aliases = listOf("sausage", "fried sausage", "hotdog")),
+            PriceItem(id = 27, name = "Tilapia", price = 35.0, category = "Proteins", aliases = listOf("tilapia", "grilled tilapia")),
+            PriceItem(id = 28, name = "Jollof Rice", price = 25.0, category = "Main Dishes", aliases = listOf("jollof", "jollof rice")),
+            PriceItem(id = 29, name = "Waakye", price = 25.0, category = "Main Dishes", aliases = listOf("waakye", "wake"))
         )
     }
 }

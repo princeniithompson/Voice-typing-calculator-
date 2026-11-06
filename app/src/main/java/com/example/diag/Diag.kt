@@ -11,12 +11,9 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.example.BuildConfig
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
 import java.io.PrintWriter
@@ -58,8 +55,7 @@ object Diag {
     val logVersion: StateFlow<Long> = _logVersion.asStateFlow()
 
     // Checklist state & historical timestamps
-    var apiKeyMasked: String = "NOT SET"
-    var apiKeyLength: Int = 0
+    var apiKeyMasked: String = "NOT CONFIGURED"
     var isApiKeySaved: Boolean = false
     var lastApiKeySavedTime: String? = null
 
@@ -85,15 +81,26 @@ object Diag {
     var activeSpeechEngine: String = "GEMINI_LIVE (models/gemini-3.5-transcribe-live)"
     var isManualVoiceIsolated: Boolean = true
     var lastTranscriptReceivedTime: String? = null
+    var lastFinalTranscriptReceivedTime: String? = null
 
-    // Counters
+    // Audio chunk accounting counters (distinguishing captured, transmitted, and noise-gated)
+    val audioChunksCaptured = AtomicLong(0)
+    val audioBytesCaptured = AtomicLong(0)
     val audioChunksSent = AtomicLong(0)
     val audioBytesSent = AtomicLong(0)
+    val audioChunksGated = AtomicLong(0)
+    val audioBytesGated = AtomicLong(0)
+
     val messagesReceivedByType = ConcurrentHashMap<String, AtomicInteger>()
     val transcriptsReceived = AtomicInteger(0)
+    val finalTranscriptsReceived = AtomicInteger(0)
     val errorsLogged = AtomicInteger(0)
+
+    // Latency metrics
     var sessionStartMs: Long = 0L
+    var firstAudioSentMs: Long = 0L
     var timeToFirstTranscriptMs: Long? = null
+    var timeAudioToFirstTranscriptMs: Long? = null
 
     private val checklistTimeFormat = SimpleDateFormat("HH:mm:ss", Locale.US)
 
@@ -118,32 +125,37 @@ object Diag {
         }
 
         // Initialize environment & initial checklist values
-        checkMicPermission(context)
-        checkInternet(context)
+        checkMicPermission(context, silent = true)
+        checkInternet(context, silent = true)
         log("LIFECYCLE", "Diag initialized. Storage path: ${logFile?.absolutePath}")
         log("SPEECH_ENGINE", "Active speech engine: $activeSpeechEngine")
     }
 
     fun updateApiKey(rawKey: String?) {
         val key = rawKey?.trim().orEmpty()
-        apiKeyLength = key.length
-        isApiKeySaved = key.isNotBlank()
+        val previousState = isApiKeySaved
+        isApiKeySaved = key.isNotBlank() && key != "MY_GEMINI_API_KEY" && !key.contains("YOUR_KEY") && key.length >= 10
+        apiKeyMasked = maskKey(key)
+
         if (isApiKeySaved) {
             lastApiKeySavedTime = currentTimeFormatted()
         }
-        apiKeyMasked = maskKey(key)
-        log("GEMINI", "API key updated: $apiKeyMasked")
-    }
 
-    fun maskKey(key: String): String {
-        return if (key.isBlank()) {
-            "NOT SET"
-        } else {
-            "set, length ${key.length}, ends with ${key.takeLast(4)}"
+        if (previousState != isApiKeySaved || memoryLog.isEmpty()) {
+            log("GEMINI", "API key status: $apiKeyMasked")
         }
     }
 
-    fun checkInternet(context: Context? = appContext): Boolean {
+    fun maskKey(key: String): String {
+        val clean = key.trim()
+        return if (clean.isBlank() || clean == "MY_GEMINI_API_KEY" || clean.contains("YOUR_KEY") || clean.length < 10) {
+            "NOT CONFIGURED"
+        } else {
+            "CONFIGURED"
+        }
+    }
+
+    fun checkInternet(context: Context? = appContext, silent: Boolean = false): Boolean {
         val ctx = context ?: return false
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         val isOnline = cm?.let {
@@ -152,22 +164,30 @@ object Diag {
             caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
                     caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         } ?: false
+        val previous = isInternetReachable
         isInternetReachable = isOnline
         if (isOnline) {
             lastInternetTime = currentTimeFormatted()
         }
+        if (!silent && previous != isOnline) {
+            log("NETWORK", "Internet connectivity changed: reachable=$isOnline")
+        }
         return isOnline
     }
 
-    fun checkMicPermission(context: Context? = appContext): Boolean {
+    fun checkMicPermission(context: Context? = appContext, silent: Boolean = false): Boolean {
         val ctx = context ?: return false
         val granted = ContextCompat.checkSelfPermission(
             ctx,
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
+        val previous = isMicPermissionGranted
         isMicPermissionGranted = granted
         if (granted) {
             lastMicPermissionTime = currentTimeFormatted()
+        }
+        if (!silent && previous != granted) {
+            log("AUDIO", "Microphone permission status changed: granted=$granted")
         }
         return granted
     }
@@ -175,34 +195,48 @@ object Diag {
     fun recordMicRecordingStarted() {
         isMicRecordingStarted = true
         lastMicRecordingStartedTime = currentTimeFormatted()
+        log("AUDIO", "AudioRecord capture loop active (mic recording started at $lastMicRecordingStartedTime)")
     }
 
     fun recordGeminiConnected() {
         isGeminiConnected = true
         lastGeminiConnectedTime = currentTimeFormatted()
+        log("GEMINI", "Gemini Live WebSocket connected at $lastGeminiConnectedTime")
     }
 
     fun recordSetupAccepted() {
         isGeminiSetupAccepted = true
         setupTimedOut = false
         lastSetupAcceptedTime = currentTimeFormatted()
-        log("GEMINI", "Gemini setup accepted (last: $lastSetupAcceptedTime)")
+        log("GEMINI", "Gemini setup accepted at $lastSetupAcceptedTime")
     }
 
     fun recordSetupTimeout() {
         setupTimedOut = true
         isGeminiSetupAccepted = false
-        log("GEMINI", "No setup response after 5 s")
+        log("GEMINI", "Gemini setup timed out after 5 seconds")
+    }
+
+    fun recordAudioChunkCaptured(length: Int) {
+        audioChunksCaptured.incrementAndGet()
+        audioBytesCaptured.addAndGet(length.toLong())
+    }
+
+    fun recordAudioChunkGated(length: Int) {
+        audioChunksGated.incrementAndGet()
+        audioBytesGated.addAndGet(length.toLong())
     }
 
     fun recordAudioChunkSent(length: Int) {
         isAudioChunksBeingSent = true
         val count = audioChunksSent.incrementAndGet()
-        val totalBytes = audioBytesSent.addAndGet(length.toLong())
+        audioBytesSent.addAndGet(length.toLong())
         lastAudioSentTime = currentTimeFormatted()
 
         if (count == 1L) {
-            log("GEMINI", "First audio chunk sent to Gemini Live (size=$length bytes)")
+            firstAudioSentMs = System.currentTimeMillis()
+            val connToAudioMs = if (sessionStartMs > 0) firstAudioSentMs - sessionStartMs else 0
+            log("GEMINI", "First audio chunk transmitted to Gemini Live (size=$length bytes, connection-to-audio latency=${connToAudioMs}ms)")
         }
     }
 
@@ -213,10 +247,27 @@ object Diag {
     fun recordTranscriptReceived(delta: String) {
         val count = transcriptsReceived.incrementAndGet()
         lastTranscriptReceivedTime = currentTimeFormatted()
+        val now = System.currentTimeMillis()
+
         if (sessionStartMs > 0 && timeToFirstTranscriptMs == null) {
-            timeToFirstTranscriptMs = System.currentTimeMillis() - sessionStartMs
+            timeToFirstTranscriptMs = now - sessionStartMs
         }
-        log("GEMINI", "Transcript #$count delta: '$delta' (last: $lastTranscriptReceivedTime)")
+        if (firstAudioSentMs > 0 && timeAudioToFirstTranscriptMs == null) {
+            timeAudioToFirstTranscriptMs = now - firstAudioSentMs
+        }
+
+        log("GEMINI", "Transcript update #$count: '$delta' (last: $lastTranscriptReceivedTime)")
+    }
+
+    fun recordFinalTranscriptReceived(text: String) {
+        finalTranscriptsReceived.incrementAndGet()
+        lastFinalTranscriptReceivedTime = currentTimeFormatted()
+        log("GEMINI", "Final transcription received: '$text' (at $lastFinalTranscriptReceivedTime)")
+    }
+
+    fun recordSessionClosure(reason: String) {
+        isGeminiConnected = false
+        log("GEMINI", "Session closure confirmed: $reason")
     }
 
     fun log(category: String, message: String) {
@@ -239,10 +290,14 @@ object Diag {
         _logVersion.value = id
 
         // Mirror to Android Logcat
-        when (category) {
-            "ERROR" -> Log.e(TAG, "[$category] $message")
-            "WARN" -> Log.w(TAG, "[$category] $message")
-            else -> Log.d(TAG, "[$category] $message")
+        try {
+            when (category) {
+                "ERROR" -> Log.e(TAG, "[$category] $message")
+                "WARN" -> Log.w(TAG, "[$category] $message")
+                else -> Log.d(TAG, "[$category] $message")
+            }
+        } catch (_: Exception) {
+            // Unmocked Log in JVM unit tests
         }
 
         // Asynchronously persist to file
@@ -271,9 +326,12 @@ object Diag {
         return memoryLog.toList()
     }
 
-    fun clearLog() {
+    /**
+     * Completely resets and clears all diagnostics data, memory logs, log files,
+     * latency metrics, and counters, starting completely fresh for an updated app version.
+     */
+    fun resetAll(context: Context? = appContext) {
         memoryLog.clear()
-        _logVersion.value = idCounter.incrementAndGet()
         logFile?.let { file ->
             fileWriterExecutor.execute {
                 try {
@@ -281,12 +339,51 @@ object Diag {
                 } catch (_: Exception) {}
             }
         }
-        log("DIAG", "Diagnostics log cleared by user.")
+
+        // Reset all counters
+        audioChunksCaptured.set(0)
+        audioBytesCaptured.set(0)
+        audioChunksSent.set(0)
+        audioBytesSent.set(0)
+        audioChunksGated.set(0)
+        audioBytesGated.set(0)
+        messagesReceivedByType.clear()
+        transcriptsReceived.set(0)
+        finalTranscriptsReceived.set(0)
+        errorsLogged.set(0)
+
+        // Reset latency measurements
+        sessionStartMs = 0L
+        firstAudioSentMs = 0L
+        timeToFirstTranscriptMs = null
+        timeAudioToFirstTranscriptMs = null
+
+        // Reset status flags & timestamps
+        lastMicRecordingStartedTime = null
+        lastAudioSentTime = null
+        lastGeminiConnectedTime = null
+        lastSetupAcceptedTime = null
+        lastTranscriptReceivedTime = null
+        lastFinalTranscriptReceivedTime = null
+        setupTimedOut = false
+
+        _logVersion.value = idCounter.incrementAndGet()
+
+        val ctx = context ?: appContext
+        if (ctx != null) {
+            checkInternet(ctx, silent = true)
+            checkMicPermission(ctx, silent = true)
+        }
+
+        log("DIAG", "Diagnostics system fully reset and refreshed by user.")
+        log("ENVIRONMENT", "QuickCalc v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) on Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        log("SPEECH_ENGINE", "Speech engine: $activeSpeechEngine")
+        log("AUDIO_GATE", "Noise gate lookahead (200ms) + hangover (500ms) active")
     }
 
     fun getSummaryText(context: Context): String {
-        checkInternet(context)
-        checkMicPermission(context)
+        checkInternet(context, silent = true)
+        checkMicPermission(context, silent = true)
 
         return buildString {
             appendLine("=== ENVIRONMENT ===")
@@ -299,25 +396,32 @@ object Diag {
             appendLine("Mic permission: ${if (isMicPermissionGranted) "granted" else "denied"}")
             appendLine()
             appendLine("=== CHECKLIST ===")
-            appendLine("- API key saved: ${if (isApiKeySaved) "yes ($apiKeyLength chars, last ${lastApiKeySavedTime ?: "N/A"})" else "no"}")
+            appendLine("- API key: $apiKeyMasked (last ${lastApiKeySavedTime ?: "N/A"})")
             appendLine("- Internet: ${if (isInternetReachable) "reachable (last ${lastInternetTime ?: "N/A"})" else "not reachable"}")
             appendLine("- Mic permission: ${if (isMicPermissionGranted) "granted (last ${lastMicPermissionTime ?: "N/A"})" else "denied"}")
             appendLine("- Mic recording started: ${if (lastMicRecordingStartedTime != null) "yes (last $lastMicRecordingStartedTime)" else "no"}")
-            appendLine("- Audio sent: ${if (lastAudioSentTime != null) "yes (last $lastAudioSentTime, ${audioChunksSent.get()} chunks)" else "no"}")
+            appendLine("- Audio transmitted: ${if (lastAudioSentTime != null) "yes (last $lastAudioSentTime, ${audioChunksSent.get()} chunks)" else "no"}")
             appendLine("- Gemini connected: ${if (lastGeminiConnectedTime != null) "yes (last $lastGeminiConnectedTime)" else "no"}")
             appendLine("- Setup accepted: ${if (lastSetupAcceptedTime != null) "yes (last $lastSetupAcceptedTime)" else if (setupTimedOut) "no (timed out after 5 s)" else "no"}")
-            appendLine("- Transcript received: ${if (lastTranscriptReceivedTime != null) "yes (last $lastTranscriptReceivedTime, ${transcriptsReceived.get()} items)" else "no"}")
+            appendLine("- Transcript received: ${if (lastTranscriptReceivedTime != null) "yes (last $lastTranscriptReceivedTime, ${transcriptsReceived.get()} updates)" else "no"}")
+            appendLine("- Final transcript received: ${if (lastFinalTranscriptReceivedTime != null) "yes (last $lastFinalTranscriptReceivedTime, ${finalTranscriptsReceived.get()} items)" else "none"}")
             appendLine("- Active speech engine: $activeSpeechEngine")
             appendLine("- Manual and voice states separate: ${if (isManualVoiceIsolated) "verified" else "leaked"}")
             appendLine()
-            appendLine("=== COUNTERS ===")
-            appendLine("- audio chunks sent: ${audioChunksSent.get()}, bytes sent: ${audioBytesSent.get()}")
+            appendLine("=== AUDIO ACCOUNTING ===")
+            appendLine("- Audio chunks captured: ${audioChunksCaptured.get()} (${audioBytesCaptured.get()} bytes)")
+            appendLine("- Audio chunks transmitted: ${audioChunksSent.get()} (${audioBytesSent.get()} bytes)")
+            appendLine("- Audio chunks noise-gated (silence): ${audioChunksGated.get()} (${audioBytesGated.get()} bytes)")
+            appendLine()
+            appendLine("=== PERFORMANCE & LATENCY ===")
+            val connLatency = timeToFirstTranscriptMs?.let { "${it} ms" } ?: "N/A"
+            val audioLatency = timeAudioToFirstTranscriptMs?.let { "${it} ms" } ?: "N/A"
+            appendLine("- Connection + First Transcript Latency: $connLatency")
+            appendLine("- Audio-to-Transcript Latency: $audioLatency")
+            appendLine("- Transcripts received: ${transcriptsReceived.get()} (final: ${finalTranscriptsReceived.get()})")
+            appendLine("- Errors logged: ${errorsLogged.get()}")
             val msgs = if (messagesReceivedByType.isEmpty()) "none" else messagesReceivedByType.entries.joinToString { "${it.key}=${it.value.get()}" }
-            appendLine("- messages received by type: $msgs")
-            appendLine("- transcripts received: ${transcriptsReceived.get()}")
-            appendLine("- errors logged: ${errorsLogged.get()}")
-            val ttft = timeToFirstTranscriptMs?.let { "${it}ms" } ?: "none"
-            appendLine("- time to first transcript: $ttft")
+            appendLine("- Messages received by type: $msgs")
             appendLine()
             appendLine("=== RECENT TIMELINE (Last 30 lines) ===")
             val recent = memoryLog.toList().takeLast(30)
@@ -330,8 +434,8 @@ object Diag {
     }
 
     fun getFullLogText(context: Context): String {
-        checkInternet(context)
-        checkMicPermission(context)
+        checkInternet(context, silent = true)
+        checkMicPermission(context, silent = true)
 
         return buildString {
             appendLine("=== ENVIRONMENT ===")
@@ -344,25 +448,32 @@ object Diag {
             appendLine("Mic permission: ${if (isMicPermissionGranted) "granted" else "denied"}")
             appendLine()
             appendLine("=== CHECKLIST ===")
-            appendLine("- API key saved: ${if (isApiKeySaved) "yes ($apiKeyLength chars, last ${lastApiKeySavedTime ?: "N/A"})" else "no"}")
+            appendLine("- API key: $apiKeyMasked (last ${lastApiKeySavedTime ?: "N/A"})")
             appendLine("- Internet: ${if (isInternetReachable) "reachable (last ${lastInternetTime ?: "N/A"})" else "not reachable"}")
             appendLine("- Mic permission: ${if (isMicPermissionGranted) "granted (last ${lastMicPermissionTime ?: "N/A"})" else "denied"}")
             appendLine("- Mic recording started: ${if (lastMicRecordingStartedTime != null) "yes (last $lastMicRecordingStartedTime)" else "no"}")
-            appendLine("- Audio sent: ${if (lastAudioSentTime != null) "yes (last $lastAudioSentTime, ${audioChunksSent.get()} chunks)" else "no"}")
+            appendLine("- Audio transmitted: ${if (lastAudioSentTime != null) "yes (last $lastAudioSentTime, ${audioChunksSent.get()} chunks)" else "no"}")
             appendLine("- Gemini connected: ${if (lastGeminiConnectedTime != null) "yes (last $lastGeminiConnectedTime)" else "no"}")
             appendLine("- Setup accepted: ${if (lastSetupAcceptedTime != null) "yes (last $lastSetupAcceptedTime)" else if (setupTimedOut) "no (timed out after 5 s)" else "no"}")
-            appendLine("- Transcript received: ${if (lastTranscriptReceivedTime != null) "yes (last $lastTranscriptReceivedTime, ${transcriptsReceived.get()} items)" else "no"}")
+            appendLine("- Transcript received: ${if (lastTranscriptReceivedTime != null) "yes (last $lastTranscriptReceivedTime, ${transcriptsReceived.get()} updates)" else "no"}")
+            appendLine("- Final transcript received: ${if (lastFinalTranscriptReceivedTime != null) "yes (last $lastFinalTranscriptReceivedTime, ${finalTranscriptsReceived.get()} items)" else "none"}")
             appendLine("- Active speech engine: $activeSpeechEngine")
             appendLine("- Manual and voice states separate: ${if (isManualVoiceIsolated) "verified" else "leaked"}")
             appendLine()
-            appendLine("=== COUNTERS ===")
-            appendLine("- audio chunks sent: ${audioChunksSent.get()}, bytes sent: ${audioBytesSent.get()}")
+            appendLine("=== AUDIO ACCOUNTING ===")
+            appendLine("- Audio chunks captured: ${audioChunksCaptured.get()} (${audioBytesCaptured.get()} bytes)")
+            appendLine("- Audio chunks transmitted: ${audioChunksSent.get()} (${audioBytesSent.get()} bytes)")
+            appendLine("- Audio chunks noise-gated (silence): ${audioChunksGated.get()} (${audioBytesGated.get()} bytes)")
+            appendLine()
+            appendLine("=== PERFORMANCE & LATENCY ===")
+            val connLatency = timeToFirstTranscriptMs?.let { "${it} ms" } ?: "N/A"
+            val audioLatency = timeAudioToFirstTranscriptMs?.let { "${it} ms" } ?: "N/A"
+            appendLine("- Connection + First Transcript Latency: $connLatency")
+            appendLine("- Audio-to-Transcript Latency: $audioLatency")
+            appendLine("- Transcripts received: ${transcriptsReceived.get()} (final: ${finalTranscriptsReceived.get()})")
+            appendLine("- Errors logged: ${errorsLogged.get()}")
             val msgs = if (messagesReceivedByType.isEmpty()) "none" else messagesReceivedByType.entries.joinToString { "${it.key}=${it.value.get()}" }
-            appendLine("- messages received by type: $msgs")
-            appendLine("- transcripts received: ${transcriptsReceived.get()}")
-            appendLine("- errors logged: ${errorsLogged.get()}")
-            val ttft = timeToFirstTranscriptMs?.let { "${it}ms" } ?: "none"
-            appendLine("- time to first transcript: $ttft")
+            appendLine("- Messages received by type: $msgs")
             appendLine()
             appendLine("=== TIMELINE ===")
             val allEntries = memoryLog.toList()
@@ -376,12 +487,14 @@ object Diag {
 
     fun saveAndShareLogFile(context: Context) {
         try {
+            log("DIAG", "Log export initiated: preparing diagnostics file")
             val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
             val fileName = "quickcalc_diagnostics_${dateFormat.format(Date())}.txt"
             val fullText = getFullLogText(context)
 
             val exportFile = File(context.filesDir, fileName)
             exportFile.writeText(fullText)
+            log("DIAG", "Diagnostics file generated: $fileName (${exportFile.length()} bytes)")
 
             val uri = FileProvider.getUriForFile(
                 context,
@@ -401,7 +514,7 @@ object Diag {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
-            log("DIAG", "Exported and opened share sheet for file: $fileName")
+            log("DIAG", "Share sheet opened successfully for file: $fileName")
         } catch (e: Exception) {
             logException("ERROR", "Failed to save and share diagnostics log file", e)
         }

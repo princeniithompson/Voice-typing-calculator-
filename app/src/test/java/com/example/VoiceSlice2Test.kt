@@ -16,7 +16,9 @@ class VoiceSlice2Test {
     private val testMenu = listOf(
         PriceItem(id = 1, name = "Banku", price = 5.0, category = "Main", aliases = listOf("banku", "bangu")),
         PriceItem(id = 2, name = "Fried Fish", price = 20.0, category = "Proteins", aliases = listOf("fried fish", "fish")),
-        PriceItem(id = 3, name = "Okro", price = 2.0, category = "Soups", aliases = listOf("okro", "okra"))
+        PriceItem(id = 3, name = "Okro", price = 2.0, category = "Soups", aliases = listOf("okro", "okra")),
+        PriceItem(id = 4, name = "Rice", price = 6.0, category = "Main", aliases = listOf("rice", "cup of rice", "plain rice")),
+        PriceItem(id = 5, name = "Chicken", price = 15.0, category = "Proteins", aliases = listOf("chicken", "fried chicken"))
     )
 
     private val parser = VoiceOrderParser(menuItemsProvider = { testMenu })
@@ -135,5 +137,65 @@ class VoiceSlice2Test {
         assertEquals("", state.expression)
         assertEquals("0", state.result)
         assertFalse(state.isEvaluated)
+    }
+
+    @Test
+    fun testTwoCupsOfRiceQuantityExtraction() {
+        // "two cups of rice" must parse to quantity 2 of Rice (2 * 6.00 = 12.00 GHS)
+        val result = parser.parse("two cups of rice")
+        assertEquals(1, result.items.size)
+        assertEquals("Rice", result.items[0].name)
+        assertEquals(2, result.items[0].quantity)
+        assertEquals(BigDecimal("12.00"), result.items[0].lineTotal)
+        assertEquals(BigDecimal("12.00"), result.total)
+        assertEquals("2 Rice", result.transcript)
+
+        // Compound: "two cups of rice and one chicken"
+        val compound = parser.parse("two cups of rice and one chicken")
+        assertEquals(2, compound.items.size)
+        assertEquals("Rice", compound.items[0].name)
+        assertEquals(2, compound.items[0].quantity)
+        assertEquals("Chicken", compound.items[1].name)
+        assertEquals(1, compound.items[1].quantity)
+        assertEquals(BigDecimal("27.00"), compound.total)
+        assertEquals("2 Rice + 1 Chicken", compound.transcript)
+    }
+
+    @Test
+    fun testAudioNoiseGateLookaheadAndHangover() {
+        val gate = com.example.audio.AudioNoiseGate(
+            initialThresholdDb = -45.0f,
+            lookaheadDurationMs = 200L,
+            hangoverDurationMs = 500L
+        )
+
+        // 1. Silent chunk (-60dB): gate is closed, returned list is empty, chunk buffered in lookahead
+        val silentChunk = ByteArray(1024) { 0 }
+        val silentOut = gate.processAudioChunk(silentChunk, currentTimeMs = 1000L)
+        assertTrue("Silent audio while gate is closed should not be sent", silentOut.isEmpty())
+        assertFalse("Gate should be closed for silence", gate.isGateOpen.value)
+
+        // 2. Loud speech chunk crossing threshold (-30dB): gate opens and PREPENDS buffered lookahead chunk!
+        // Generate a loud sine/pulse PCM 16-bit
+        val loudChunk = ByteArray(1024)
+        for (i in 0 until 512) {
+            val sample = (15000 * Math.sin(2.0 * Math.PI * i / 16.0)).toInt().toShort()
+            loudChunk[i * 2] = (sample.toInt() and 0xFF).toByte()
+            loudChunk[i * 2 + 1] = ((sample.toInt() shr 8) and 0xFF).toByte()
+        }
+
+        val speechOut = gate.processAudioChunk(loudChunk, currentTimeMs = 1050L)
+        assertTrue("Gate should be open when threshold crossed", gate.isGateOpen.value)
+        assertEquals("Output must contain prepended lookahead buffer + current chunk", 2, speechOut.size)
+
+        // 3. Brief silence (conversational pause of 200ms < 500ms hangover): gate STAYS open
+        val pauseOut = gate.processAudioChunk(silentChunk, currentTimeMs = 1250L)
+        assertTrue("Gate must remain open during 500ms hangover hold time", gate.isGateOpen.value)
+        assertEquals("Chunk during hangover must be transmitted", 1, pauseOut.size)
+
+        // 4. Hangover expired (pause > 500ms, e.g. at 1700ms which is 650ms after speech): gate closes
+        val expiredOut = gate.processAudioChunk(silentChunk, currentTimeMs = 1750L)
+        assertFalse("Gate must close after hangover hold time expires", gate.isGateOpen.value)
+        assertTrue("No output after hangover closes", expiredOut.isEmpty())
     }
 }

@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,12 +42,18 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +73,7 @@ fun DiagnosticsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var showResetConfirmDialog by remember { mutableStateOf(false) }
 
     // Back handler
     BackHandler {
@@ -73,9 +83,65 @@ fun DiagnosticsScreen(
 
     LaunchedEffect(Unit) {
         Diag.log("LIFECYCLE", "DiagnosticsScreen opened")
-        Diag.checkInternet(context)
-        Diag.checkMicPermission(context)
+        Diag.checkInternet(context, silent = true)
+        Diag.checkMicPermission(context, silent = true)
         Diag.updateApiKey(apiKey)
+    }
+
+    if (showResetConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showResetConfirmDialog = false
+            },
+            title = {
+                Text(
+                    text = "Refresh Diagnostics?",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to refresh and clear all diagnostics? This will clear all recorded logs and reset all counters so you can start completely fresh with the updated version of the application.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showResetConfirmDialog = false
+                        HapticHelper.performHeavyClick(context)
+                        Diag.log("TOUCH", "DiagnosticsScreen: Reset confirmed by user")
+                        Diag.resetAll(context)
+                        Toast.makeText(
+                            context,
+                            "Diagnostics refreshed and cleared",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    modifier = Modifier.testTag("btn_confirm_reset_diag")
+                ) {
+                    Text("Yes, Refresh")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showResetConfirmDialog = false
+                        Diag.log("TOUCH", "DiagnosticsScreen: Reset cancelled by user")
+                    },
+                    modifier = Modifier.testTag("btn_cancel_reset_diag")
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -105,6 +171,22 @@ fun DiagnosticsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(
+                        onClick = {
+                            HapticHelper.performHeavyClick(context)
+                            Diag.log("TOUCH", "DiagnosticsScreen: TopBar refresh icon clicked")
+                            showResetConfirmDialog = true
+                        },
+                        modifier = Modifier.testTag("btn_diag_refresh_top")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh & Reset Diagnostics",
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -260,6 +342,46 @@ fun DiagnosticsScreen(
                                     text = "Copy txt file",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // Button 3: Refresh & Reset Diagnostics
+                        OutlinedButton(
+                            onClick = {
+                                HapticHelper.performHeavyClick(context)
+                                Diag.log("TOUCH", "DiagnosticsScreen: 'Refresh & Reset Diagnostics' button clicked")
+                                showResetConfirmDialog = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .testTag("btn_reset_diagnostics"),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "Reset & Refresh Diagnostics",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
                                 )
                             }
                         }

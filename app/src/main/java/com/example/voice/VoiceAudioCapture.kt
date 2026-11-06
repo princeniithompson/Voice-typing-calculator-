@@ -57,7 +57,7 @@ class VoiceAudioCapture(
 
         return try {
             val record = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                MediaRecorder.AudioSource.MIC,
                 sampleRate,
                 channelConfig,
                 audioFormat,
@@ -88,6 +88,7 @@ class VoiceAudioCapture(
                     if (readBytes > 0) {
                         totalChunks++
                         totalBytes += readBytes
+                        com.example.diag.Diag.recordAudioChunkCaptured(readBytes)
                         val chunkCopy = buffer.copyOf(readBytes)
                         onAudioChunk(chunkCopy, readBytes)
 
